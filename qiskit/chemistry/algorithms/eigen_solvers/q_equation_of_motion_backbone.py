@@ -1,6 +1,49 @@
-class EOMExcitedStatesCalculation:
+# This code is part of Qiskit.
+#
+# (C) Copyright IBM 2019, 2020.
+#
+# This code is licensed under the Apache License, Version 2.0. You may
+# obtain a copy of this license in the LICENSE.txt file in the root directory
+# of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# Any modifications or derivative works of this code must retain this
+# copyright notice, and modified files need to carry a notice indicating
+# that they have been altered from the originals.
 
-    def __init__(self, ground_state_calculation, excitation_type, full_active_space = True):
+""" TODO """
+
+from abc import ABC, abstractmethod
+
+from qiskit.chemistry.drivers import BaseDriver
+from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
+
+
+class ExcitedStateCalculation(ABC):
+    """TODO"""
+
+    def __init__(self, ground_state_calculation: GroundStateCalculation) -> None:
+        """
+        Args:
+            ground_state_calculation: TODO
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def calculate_excited_states(self, driver: BaseDriver):
+        """TODO
+
+        Args:
+            driver: TODO
+
+        Returns:
+            ExcitedStateResult (TODO type hint)
+        """
+        raise NotImplementedError()
+
+
+class EOMExcitedStatesCalculation(ExcitedStateCalculation):
+
+    def __init__(self, ground_state_calculation, quantum_instance, excitation_type):
         self._gsc = ground_state_calculation
 
         if [letter not in ['S','D','T'] for letter in excitation_type]:
@@ -16,15 +59,15 @@ class EOMExcitedStatesCalculation:
         about how the ground state should be prepared.
         :param excitation_type: 'S' (single), 'D' (double), 'T' (triple) or a combination of them
         e.g. 'SD', 'SDT'.
-        :param full_active_space: if True all degrees of freedom will be considered for 
-        constructing the EOM matrix elements. If False the active space will be restricted to that 
-        of the ground state calculation. 
         """
 
-    def calculate_excited_states(self, driver, quantum_instance):
+    def calculate_excited_states(self, driver, custom_active_space = None):
         """
         construct and solves the EOM pseudo-eigenvalue problem to obtain the excitation energies
         and the excitation operators expansion coefficients
+
+        Args:
+            custom_active_space: if None use the GSC one, else use the custom one.
         """
         results = {'excitation energies': None,
                    'expansion coefficients': None,
@@ -35,7 +78,7 @@ class EOMExcitedStatesCalculation:
         return results
 
 
-    def build_eom_matrices(self, ground_state, quantum_instance,
+    def _build_eom_matrices(self, ground_state, quantum_instance,
                                     q_commutators, w_commutators, m_commutators, v_commutators):
 
         """
@@ -53,7 +96,7 @@ class EOMExcitedStatesCalculation:
 
         return m_mat, v_mat, q_mat, w_mat, m_mat_std, v_mat_std, q_mat_std, w_mat_std
 
-    def compute_excitation_energies(self, m_mat, v_mat, q_mat, w_mat):
+    def _compute_excitation_energies(self, m_mat, v_mat, q_mat, w_mat):
         """
         Classically solves the EOM pseudo-eigenvalue problem
         :param m_mat: M matrix
@@ -72,12 +115,12 @@ class EOMExcitedStatesCalculation:
 
 class NumericalEOMExcitedStatesCalculation(EOMExcitedStatesCalculation):
 
-    def __init__(self, ground_state_calculation, excitation_type, full_active_space = True):
+    def __init__(self, ground_state_calculation, quantum_instance, excitation_type, full_active_space = True):
         super().__init__(ground_state_calculation, excitation_type,
                          full_active_space=full_active_space)
 
 
-    def calculate_excited_states(self, driver, quantum_instance):
+    def calculate_excited_states(self, driver):
 
         """
         Calculate excitations energies
@@ -114,7 +157,7 @@ class NumericalEOMExcitedStatesCalculation(EOMExcitedStatesCalculation):
 
         return results
 
-    def build_all_commutators(self, excitations_list, hopping_operators, type_of_commutativities):
+    def _build_all_commutators(self, excitations_list, hopping_operators, type_of_commutativities):
         """Building all commutators for Q, W, M, V matrices.
 
          Args:
@@ -140,11 +183,11 @@ class NumericalEOMExcitedStatesCalculation(EOMExcitedStatesCalculation):
 
 class AnalyticalEOMExcitedStatesCalculation(EOMExcitedStatesCalculation):
 
-    def __init__(self, ground_state_calculation, excitation_type, full_active_space = True):
+    def __init__(self, ground_state_calculation, quantum_instance, excitation_type, full_active_space = True):
         super().__init__(ground_state_calculation, excitation_type,
                          full_active_space=full_active_space)
 
-    def calculate_excited_states(self, driver, quantum_instance):
+    def calculate_excited_states(self, driver):
 
         """
         Calculate excitations energies
@@ -183,7 +226,7 @@ class AnalyticalEOMExcitedStatesCalculation(EOMExcitedStatesCalculation):
 
         return results
 
-    def build_all_commutators(self, arguments):
+    def _build_all_commutators(self, arguments):
         """
         check with Mario's code
         """
