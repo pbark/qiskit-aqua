@@ -1,6 +1,6 @@
 # This code is part of Qiskit.
 #
-# (C) Copyright IBM 2018, 2020.
+# (C) Copyright IBM 2020.
 #
 # This code is licensed under the Apache License, Version 2.0. You may
 # obtain a copy of this license in the LICENSE.txt file in the root directory
@@ -9,23 +9,24 @@
 # Any modifications or derivative works of this code must retain this
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
+
+"""This module implements a transformation from a fermionic problem to a qubit operator.
+
+The problem is described in a driver.
 """
-This module implements a molecular Hamiltonian operator, representing the
-energy of the electrons and nuclei in a molecule.
-"""
-import warnings
-from typing import Optional, List, Union, cast, Tuple
+
+from typing import Optional, List, Union, cast, Tuple, Dict, Any
 import logging
 from enum import Enum
 
 import numpy as np
-from qiskit.aqua.algorithms import MinimumEigensolverResult, EigensolverResult
 from qiskit.aqua.operators import Z2Symmetries, WeightedPauliOperator
-from qiskit.chemistry import QMolecule, QiskitChemistryError
+from qiskit.chemistry import QiskitChemistryError, QMolecule
 from qiskit.chemistry.fermionic_operator import FermionicOperator
-from .chemistry_operator import (ChemistryOperator,
-                                 MolecularGroundStateResult,
-                                 DipoleTuple)
+from qiskit.chemistry.drivers import BaseDriver
+from qiskit.chemistry.results import DipoleTuple, EigenstateResult, ElectronicStructureResult
+
+from .qubit_operator_transformation import QubitOperatorTransformation
 from ..components.initial_states import HartreeFock
 
 logger = logging.getLogger(__name__)
@@ -44,11 +45,8 @@ class QubitMappingType(Enum):
     BRAVYI_KITAEV = 'bravyi_kitaev'
 
 
-class Hamiltonian(ChemistryOperator):
-    """
-    A molecular Hamiltonian operator, representing the
-    energy of the electrons and nuclei in a molecule.
-    """
+class FermionicTransformation(QubitOperatorTransformation):
+    """A transformation from a fermionic problem, represented by a driver, to a qubit operator."""
 
     def __init__(self,
                  transformation: TransformationType = TransformationType.FULL,
@@ -60,7 +58,7 @@ class Hamiltonian(ChemistryOperator):
         """
         Args:
             transformation: full or particle_hole
-            qubit_mapping: jordan_wigner, parity or bravyi_kitaev
+            qubit_mapping: 'jordan_wigner', 'parity' or 'bravyi_kitaev'
             two_qubit_reduction: Whether two qubit reduction should be used,
                                         when parity mapping only
             freeze_core: Whether to freeze core orbitals when possible
@@ -82,15 +80,11 @@ class Hamiltonian(ChemistryOperator):
         Raises:
             QiskitChemistryError: Invalid symmetry reduction
         """
-        warnings.warn('The Hamiltonian class is deprecated as of Qiskit Aqua 0.8.0 and will be '
-                      'removed no earlier than 3 months after the release date. Instead, the '
-                      'FermionicTransformation can be used.', DeprecationWarning, stacklevel=2)
         transformation = transformation.value
-        qubit_mapping = qubit_mapping.value
         orbital_reduction = orbital_reduction if orbital_reduction is not None else []
         super().__init__()
         self._transformation = transformation
-        self._qubit_mapping = qubit_mapping
+        self._qubit_mapping = qubit_mapping.value
         self._two_qubit_reduction = two_qubit_reduction
         self._freeze_core = freeze_core
         self._orbital_reduction = orbital_reduction
@@ -99,6 +93,7 @@ class Hamiltonian(ChemistryOperator):
                 if z2symmetry_reduction != 'auto':
                     raise QiskitChemistryError('Invalid z2symmetry_reduction value')
         self._z2symmetry_reduction = z2symmetry_reduction
+        self._has_dipole_moments = False
 
         # Store values that are computed by the classical logic in order
         # that later they may be combined with the quantum result
@@ -117,8 +112,39 @@ class Hamiltonian(ChemistryOperator):
         self._ph_y_dipole_shift = 0.0
         self._ph_z_dipole_shift = 0.0
 
-    def run(self, qmolecule: QMolecule) -> Tuple[WeightedPauliOperator, List[WeightedPauliOperator]]:
-        """ run method"""
+        self._molecule_info: Dict[str, Any] = {}
+
+    def transform(self, driver: BaseDriver,
+                  aux_operators: Optional[List[FermionicOperator]] = None
+                  ) -> Tuple[WeightedPauliOperator, List[WeightedPauliOperator]]:
+        """Transformation from the ``driver`` to a qubit operator.
+
+        Args:
+            driver: A driver encoding the molecule information.
+            aux_operators: Additional auxiliary ``FermionicOperator``s to evaluate.
+
+        Returns:
+            A qubit operator and a dictionary of auxiliary operators.
+        """
+        q_molecule = driver.run()
+        ops, aux_ops = self._do_transform(q_molecule, aux_operators)
+
+        return ops, aux_ops
+
+    def _do_transform(self, qmolecule: QMolecule,
+                      aux_operators: Optional[List[Union[FermionicOperator,
+                                                         WeightedPauliOperator]]] = None
+                      ) -> Tuple[WeightedPauliOperator, List[WeightedPauliOperator]]:
+        """
+        Args:
+            qmolecule: qmolecule
+            aux_operators: Additional ``FermionicOperator``s to map to a qubit operator.
+                Objects of type ``WeightedPauliOperator`` undergo no transformation.
+
+        Returns:
+            (qubit operator, auxiliary operators)
+
+        """
         logger.debug('Processing started...')
         # Save these values for later combination with the quantum computation result
         self._hf_energy = qmolecule.hf_energy
@@ -190,7 +216,7 @@ class Hamiltonian(ChemistryOperator):
 
         fer_op = FermionicOperator(h1=qmolecule.one_body_integrals, h2=qmolecule.two_body_integrals)
         fer_op, self._energy_shift, did_shift = \
-            Hamiltonian._try_reduce_fermionic_operator(fer_op, freeze_list, remove_list)
+            FermionicTransformation._try_reduce_fermionic_operator(fer_op, freeze_list, remove_list)
         if did_shift:
             logger.info("Frozen orbital energy shift: %s", self._energy_shift)
         if self._transformation == TransformationType.PARTICLE_HOLE.value:
@@ -198,24 +224,41 @@ class Hamiltonian(ChemistryOperator):
             self._ph_energy_shift = -ph_shift
             logger.info("Particle hole energy shift: %s", self._ph_energy_shift)
         logger.debug('Converting to qubit using %s mapping', self._qubit_mapping)
-        qubit_op = Hamiltonian._map_fermionic_operator_to_qubit(fer_op,
-                                                                self._qubit_mapping, new_nel,
-                                                                self._two_qubit_reduction)
-        qubit_op.name = 'Electronic Hamiltonian'
+        qubit_op = FermionicTransformation._map_fermionic_operator_to_qubit(
+            fer_op, self._qubit_mapping, new_nel, self._two_qubit_reduction
+            )
+        qubit_op.name = 'Fermionic Operator'
 
         logger.debug('  num paulis: %s, num qubits: %s', len(qubit_op.paulis), qubit_op.num_qubits)
 
-        aux_ops = []
+        aux_ops = []  # list of the aux operators
+        apply_reductions = []  # list of bools specifying whether to apply reductions or not
 
-        def _add_aux_op(aux_op, name):
-            aux_qop = Hamiltonian._map_fermionic_operator_to_qubit(aux_op,
-                                                                   self._qubit_mapping,
-                                                                   new_nel,
-                                                                   self._two_qubit_reduction)
-            aux_qop.name = name
+        def _add_aux_op(aux_op: FermionicOperator, name: str) -> None:
+            """
+            Add auxiliary operators
+
+            Args:
+                aux_op: auxiliary operators
+                name: name
+
+            """
+            if not isinstance(aux_op, WeightedPauliOperator):
+                aux_qop = FermionicTransformation._map_fermionic_operator_to_qubit(
+                    aux_op, self._qubit_mapping, new_nel, self._two_qubit_reduction
+                    )
+                aux_qop.name = name
+                apply_reduction = True
+            else:
+                aux_qop = aux_op
+                apply_reduction = False
+
             aux_ops.append(aux_qop)
+            apply_reductions.append(apply_reduction)
             logger.debug('  num paulis: %s', aux_qop.paulis)
 
+        # the first three operators are hardcoded to number of particles, angular momentum
+        # and magnetization in this order
         logger.debug('Creating aux op for Number of Particles')
         _add_aux_op(fer_op.total_particle_number(), 'Number of Particles')
         logger.debug('Creating aux op for S^2')
@@ -223,8 +266,22 @@ class Hamiltonian(ChemistryOperator):
         logger.debug('Creating aux op for Magnetization')
         _add_aux_op(fer_op.total_magnetization(), 'Magnetization')
 
+        # the next three are dipole moments, if supported by the qmolecule
         if qmolecule.has_dipole_integrals():
-            def _dipole_op(dipole_integrals, axis):
+            self._has_dipole_moments = True
+
+            def _dipole_op(dipole_integrals: np.ndarray, axis: str) \
+                    -> Tuple[WeightedPauliOperator, float, float]:
+                """
+                Dipole operators
+
+                Args:
+                    dipole_integrals: dipole integrals
+                    axis: axis for dipole moment calculation
+
+                Returns:
+                    (qubit_op_, shift, ph_shift_)
+                """
                 logger.debug('Creating aux op for dipole %s', axis)
                 fer_op_ = FermionicOperator(h1=dipole_integrals)
                 fer_op_, shift, did_shift_ = self._try_reduce_fermionic_operator(fer_op_,
@@ -252,9 +309,13 @@ class Hamiltonian(ChemistryOperator):
             op_dipole_z, self._z_dipole_shift, self._ph_z_dipole_shift = \
                 _dipole_op(qmolecule.z_dipole_integrals, 'z')
 
-            aux_ops.append(op_dipole_x)
-            aux_ops.append(op_dipole_y)
-            aux_ops.append(op_dipole_z)
+            aux_ops += [op_dipole_x, op_dipole_y, op_dipole_z]
+            apply_reductions += 3 * [True]
+
+        # add user specified auxiliary operators
+        if aux_operators is not None:
+            for name, aux_op in aux_operators.items():
+                _add_aux_op(aux_op, name)
 
         logger.info('Molecule num electrons: %s, remaining for processing: %s',
                     [num_alpha, num_beta], new_nel)
@@ -263,23 +324,39 @@ class Hamiltonian(ChemistryOperator):
         logger.info('Molecule num spin orbitals: %s, remaining for processing: %s',
                     nspinorbs, new_nspinorbs)
 
-        self._add_molecule_info(self.INFO_NUM_PARTICLES, [new_num_alpha, new_num_beta])
-        self._add_molecule_info(self.INFO_NUM_ORBITALS, new_nspinorbs)
-        self._add_molecule_info(self.INFO_TWO_QUBIT_REDUCTION,
-                                self._two_qubit_reduction
-                                if self._qubit_mapping == 'parity' else False)
+        self._molecule_info['num_particles'] = [new_num_alpha, new_num_beta]
+        self._molecule_info['num_orbitals'] = new_nspinorbs
+        reduction = self._two_qubit_reduction if self._qubit_mapping == 'parity' else False
+        self._molecule_info['two_qubit_reduction'] = reduction
 
         z2symmetries = Z2Symmetries([], [], [], None)
         if self._z2symmetry_reduction is not None:
             logger.debug('Processing z2 symmetries')
-            qubit_op, aux_ops, z2symmetries = self._process_z2symmetry_reduction(qubit_op, aux_ops)
-        self._add_molecule_info(self.INFO_Z2SYMMETRIES, z2symmetries)
+            qubit_op, aux_ops, z2symmetries = self._process_z2symmetry_reduction(qubit_op, aux_ops,
+                                                                                 apply_reductions)
+        self._molecule_info['z2_symmetries'] = z2symmetries
 
         logger.debug('Processing complete ready to run algorithm')
         return qubit_op, aux_ops
 
-    def _process_z2symmetry_reduction(self, qubit_op, aux_ops):
+    def _process_z2symmetry_reduction(self,
+                                      qubit_op: WeightedPauliOperator,
+                                      aux_ops: List[WeightedPauliOperator],
+                                      apply_reductions: List[bool]) -> Tuple:
+        """
+        Implement z2 symmetries in the qubit operator
 
+        Args:
+            qubit_op : qubit operator
+            aux_ops: auxiliary operators
+            apply_reductions: whether to apply reductions on the aux_ops
+
+        Returns:
+            (z2_qubit_op, z2_aux_ops, z2_symmetries)
+
+        Raises:
+            QiskitChemistryError: Invalid input
+        """
         z2_symmetries = Z2Symmetries.find_Z2_symmetries(qubit_op)
         if z2_symmetries.is_empty():
             logger.debug('No Z2 symmetries found')
@@ -295,21 +372,21 @@ class Hamiltonian(ChemistryOperator):
             symmetry_ops = []
             for symmetry in z2_symmetries.symmetries:
                 symmetry_ops.append(WeightedPauliOperator(paulis=[[1.0, symmetry]]))
-            commutes = Hamiltonian._check_commutes(symmetry_ops, qubit_op)
+            commutes = FermionicTransformation._check_commutes(symmetry_ops, qubit_op)
             if not commutes:
                 raise QiskitChemistryError('Z2 symmetry failure main operator must commute '
                                            'with symmetries found from it')
             for i, aux_op in enumerate(aux_ops):
-                commutes = Hamiltonian._check_commutes(symmetry_ops, aux_op)
+                commutes = FermionicTransformation._check_commutes(symmetry_ops, aux_op)
                 if not commutes:
                     aux_ops[i] = None  # Discard since no meaningful measurement can be done
 
             if self._z2symmetry_reduction == 'auto':
-                hf_state = HartreeFock(num_orbitals=self._molecule_info[self.INFO_NUM_ORBITALS],
+                hf_state = HartreeFock(num_orbitals=self._molecule_info['num_orbitals'],
                                        qubit_mapping=self._qubit_mapping,
                                        two_qubit_reduction=self._two_qubit_reduction,
-                                       num_particles=self._molecule_info[self.INFO_NUM_PARTICLES])
-                z2_symmetries = Hamiltonian._pick_sector(z2_symmetries, hf_state.bitstr)
+                                       num_particles=self._molecule_info['num_particles'])
+                z2_symmetries = FermionicTransformation._pick_sector(z2_symmetries, hf_state.bitstr)
             else:
                 if len(self._z2symmetry_reduction) != len(z2_symmetries.symmetries):
                     raise QiskitChemistryError('z2symmetry_reduction tapering values list has '
@@ -327,14 +404,29 @@ class Hamiltonian(ChemistryOperator):
             chop_to = 0.00000001  # Use same threshold as qubit mapping to chop tapered operator
             z2_qubit_op = z2_symmetries.taper(qubit_op).chop(chop_to)
             z2_aux_ops = []
-            for aux_op in aux_ops:
-                z2_aux_ops.append(z2_symmetries.taper(aux_op).chop(chop_to) if aux_op is not None
-                                  else None)
+            for aux_op, apply_reduction in zip(aux_ops, apply_reductions):
+                if aux_op is None:
+                    z2_aux_ops += [None]
+                elif apply_reduction:
+                    z2_aux_ops += [z2_symmetries.taper(aux_op).chop(chop_to)]
+                else:
+                    z2_aux_ops += [aux_op]
 
         return z2_qubit_op, z2_aux_ops, z2_symmetries
 
     @staticmethod
-    def _check_commutes(cliffords, operator):
+    def _check_commutes(cliffords: List[WeightedPauliOperator],
+                        operator: WeightedPauliOperator) -> bool:
+        """
+        Check commutations
+
+        Args:
+            cliffords : cliffords
+            operator: qubit operator
+
+        Returns:
+            Boolean: does_commute
+        """
         commutes = []
         for clifford in cliffords:
             commutes.append(operator.commute_with(clifford))
@@ -343,17 +435,17 @@ class Hamiltonian(ChemistryOperator):
         return does_commute
 
     @staticmethod
-    def _pick_sector(z2_symmetries, hf_str):
+    def _pick_sector(z2_symmetries: Z2Symmetries, hf_str: np.ndarray) -> Z2Symmetries:
         """
         Based on Hartree-Fock bit string and found symmetries to determine the sector.
         The input z2 symmetries will be mutated with the determined tapering values.
 
         Args:
-            z2_symmetries (Z2Symmetries): the z2 symmetries object.
-            hf_str (numpy.ndarray): Hartree-Fock bit string (the last index is for qubit 0).
+            z2_symmetries: the z2 symmetries object.
+            hf_str: Hartree-Fock bit string (the last index is for qubit 0).
 
         Returns:
-            Z2Symmetries: the original z2 symmetries filled with the correct tapering values.
+            the original z2 symmetries filled with the correct tapering values.
         """
         # Finding all the symmetries using the find_Z2_symmetries:
         taper_coef = []
@@ -364,169 +456,78 @@ class Hamiltonian(ChemistryOperator):
         z2_symmetries.tapering_values = taper_coef
         return z2_symmetries
 
-    # Called by public superclass method process_algorithm_result to complete specific processing
-    def _process_algorithm_result(self, algo_result):
-        if isinstance(algo_result, MinimumEigensolverResult):
-            return self._process_algorithm_result_ground_state(algo_result)
-        elif isinstance(algo_result, EigensolverResult):
-            return self._process_algorithm_result_deprecated(algo_result)
-            # TODO return self._process_algorithm_result_excited_states(algo_result)
-        else:
-            return self._process_algorithm_result_deprecated(algo_result)
+    def interpret(self, eigenstate_result: EigenstateResult) -> ElectronicStructureResult:
+        """Interprets an EigenstateResult in the context of this transformation.
 
-    def _process_algorithm_result_ground_state(self, algo_result: MinimumEigensolverResult) \
-            -> MolecularGroundStateResult:
-        mgsr = MolecularGroundStateResult()
-        mgsr.algorithm_result = algo_result
-        mgsr.hartree_fock_energy = self._hf_energy
-        mgsr.nuclear_repulsion_energy = self._nuclear_repulsion_energy
+        Args:
+            eigenstate_result: an eigenstate result object.
+
+        Returns:
+            An electronic structure result.
+        """
+        result = ElectronicStructureResult(eigenstate_result.data)
+        result.computed_electronic_energy = eigenstate_result.eigenvalue.real
+        result.hartree_fock_energy = self._hf_energy
+        result.nuclear_repulsion_energy = self._nuclear_repulsion_energy
         if self._nuclear_dipole_moment is not None:
-            mgsr.nuclear_dipole_moment = tuple(x for x in self._nuclear_dipole_moment)
-        mgsr.computed_electronic_energy = algo_result.eigenvalue.real
-        mgsr.ph_extracted_energy = self._ph_energy_shift
-        mgsr.frozen_extracted_energy = self._energy_shift
-        aux_ops_vals = algo_result.aux_operator_eigenvalues
-        if aux_ops_vals is not None:
-            # Dipole results if dipole aux ops were present
-            dipole_idx = 3
-            if len(aux_ops_vals) > dipole_idx:
-                mgsr.reverse_dipole_sign = self._reverse_dipole_sign
-                dipm = []
-                for i in range(dipole_idx, dipole_idx+3):  # Gets X, Y and Z components
-                    dipm.append(aux_ops_vals[i][0].real if aux_ops_vals[i] is not None else None)
-                mgsr.computed_dipole_moment = cast(DipoleTuple, tuple(dipm))
-                mgsr.ph_extracted_dipole_moment = (self._ph_x_dipole_shift,
-                                                   self._ph_y_dipole_shift,
-                                                   self._ph_z_dipole_shift)
-                mgsr.frozen_extracted_dipole_moment = (self._x_dipole_shift,
-                                                       self._y_dipole_shift,
-                                                       self._z_dipole_shift)
-            # The first 3 entries are num particles, total angular momentum and magnetization
-            mgsr.num_particles = aux_ops_vals[0][0].real \
-                if aux_ops_vals[0] is not None else None
-            mgsr.total_angular_momentum = aux_ops_vals[1][0].real \
-                if aux_ops_vals[1] is not None else None
-            mgsr.magnetization = aux_ops_vals[2][0].real \
-                if aux_ops_vals[2] is not None else None
-        return mgsr
+            result.nuclear_dipole_moment = tuple(x for x in self._nuclear_dipole_moment)
+        result.ph_extracted_energy = self._ph_energy_shift
+        result.frozen_extracted_energy = self._energy_shift
+        if result.aux_values is not None:
+            # the first three values are hardcoded to number of particles, angular momentum
+            # and magnetization in this order
+            if result.aux_values[0] is not None:
+                result.num_particles = result.aux_values[0][0].real
+            else:
+                result.num_particles = None
 
-    def _process_algorithm_result_deprecated(self, algo_result):
-        warnings.warn('Processing a dictionary result is deprecated,'
-                      ' pass a (minimum) eigensolver result now.', DeprecationWarning)
-        # pylint: disable=len-as-condition
-        result = {}
+            if result.aux_values[1] is not None:
+                result.total_angular_momentum = result.aux_values[1][0].real
+            else:
+                result.total_angular_momentum = None
 
-        # Ground state energy
-        egse = algo_result['energy'] + self._energy_shift + self._ph_energy_shift
-        result['energy'] = egse
-        lines = ['=== GROUND STATE ENERGY ===']
-        lines.append(' ')
-        lines.append('* Electronic ground state energy (Hartree): {}'.format(round(egse, 12)))
-        lines.append('  - computed part:      {}'.format(round(algo_result['energy'], 12)))
-        lines.append('  - frozen energy part: {}'.format(round(self._energy_shift, 12)))
-        lines.append('  - particle hole part: {}'.format(round(self._ph_energy_shift, 12)))
-        if self._nuclear_repulsion_energy is not None:
-            lines.append('~ Nuclear repulsion energy (Hartree): {}'.format(
-                round(self._nuclear_repulsion_energy, 12)))
-            lines.append('> Total ground state energy (Hartree): {}'.format(
-                round(self._nuclear_repulsion_energy + egse, 12)))
-            if 'aux_ops' in algo_result and len(algo_result['aux_ops']) > 0:
-                aux_ops = algo_result['aux_ops'][0]
-                num_particles = aux_ops[0][0]
-                spin_squared = aux_ops[1][0]
-                spin = (-1.0 + np.sqrt(1 + 4 * spin_squared)) / 2
-                m = aux_ops[2][0]
-                lines.append(
-                    '  Measured:: Num particles: {:.3f}, S: {:.3f}, M: {:.5f}'.format(
-                        num_particles, spin, m))
-            result['energy'] = self._nuclear_repulsion_energy + egse
-            result['nuclear_repulsion_energy'] = self._nuclear_repulsion_energy
-        if self._hf_energy is not None:
-            result['hf_energy'] = self._hf_energy
+            if result.aux_values[2] is not None:
+                result.magnetization = result.aux_values[2][0].real
+            else:
+                result.magnetization = None
 
-        # Excited states list - it includes ground state too
-        if 'energies' in algo_result:
-            exsce = \
-                [x + self._energy_shift + self._ph_energy_shift for x in algo_result['energies']]
-            exste = [x + self._nuclear_repulsion_energy for x in exsce]
-            result['energies'] = exste
-            if len(exsce) > 1:
-                lines.append(' ')
-                lines.append('=== EXCITED STATES ===')
-                lines.append(' ')
-                lines.append(
-                    '> Excited states energies (plus ground): {}'.format(
-                        [round(x, 12) for x in exste]))
-                lines.append(
-                    '    - computed: {}'.format([round(x, 12) for x in algo_result['energies']]))
-                if 'cond_number' in algo_result:  # VQKE condition num for eigen vals
-                    lines.append('    - cond num: {}'.format(algo_result['cond_number']))
+            # the next three are hardcoded to Dipole moments, if they are set
+            if len(result.aux_values) >= 6 and self._has_dipole_moments:
+                # check if the names match
+                # extract dipole moment in each axis
+                dipole_moment = []
+                for moment in result.aux_values[3:6]:
+                    if moment is not None:
+                        dipole_moment += [moment[0].real]
+                    else:
+                        dipole_moment += [None]
 
-                if 'aux_ops' in algo_result and len(algo_result['aux_ops']) > 0:
-                    lines.append(
-                        '  ......................................................................')
-                    lines.append(
-                        '  ###:  Total Energy,      Computed,       # particles,   S         M')
-                    for i in range(len(algo_result['aux_ops'])):
-                        aux_ops = algo_result['aux_ops'][i]
-                        num_particles = aux_ops[0][0]
-                        spin_squared = aux_ops[1][0]
-                        spin = (-1.0 + np.sqrt(1 + 4 * spin_squared)) / 2
-                        m = aux_ops[2][0]
-                        lines.append(
-                            '  {:>3}: {: 16.12f}, {: 16.12f},     {:5.3f},   {:5.3f},  {:8.5f}'.
-                            format(i, exste[i], algo_result['energies'][i], num_particles, spin, m))
-        else:
-            result['energies'] = [result['energy']]
+                result.reverse_dipole_sign = self._reverse_dipole_sign
+                result.computed_dipole_moment = cast(DipoleTuple, tuple(dipole_moment))
+                result.ph_extracted_dipole_moment = (self._ph_x_dipole_shift,
+                                                     self._ph_y_dipole_shift,
+                                                     self._ph_z_dipole_shift)
+                result.frozen_extracted_dipole_moment = (self._x_dipole_shift,
+                                                         self._y_dipole_shift,
+                                                         self._z_dipole_shift)
 
-        # Dipole computation
-        dipole_idx = 3
-        if 'aux_ops' in algo_result and len(algo_result['aux_ops']) > 0 and \
-                len(algo_result['aux_ops'][0]) > dipole_idx:
-            dipole_moments_x = algo_result['aux_ops'][0][dipole_idx + 0][0]
-            dipole_moments_y = algo_result['aux_ops'][0][dipole_idx + 1][0]
-            dipole_moments_z = algo_result['aux_ops'][0][dipole_idx + 2][0]
-
-            _elec_dipole = \
-                np.array([dipole_moments_x + self._x_dipole_shift + self._ph_x_dipole_shift,
-                          dipole_moments_y + self._y_dipole_shift + self._ph_y_dipole_shift,
-                          dipole_moments_z + self._z_dipole_shift + self._ph_z_dipole_shift])
-            lines.append(' ')
-            lines.append('=== DIPOLE MOMENT ===')
-            lines.append(' ')
-            lines.append('* Electronic dipole moment (a.u.): {}'.format(
-                Hamiltonian._dipole_to_string(_elec_dipole)))
-            lines.append('  - computed part:      {}'.format(
-                Hamiltonian._dipole_to_string([dipole_moments_x,
-                                               dipole_moments_y, dipole_moments_z])))
-            lines.append('  - frozen energy part: {}'.format(
-                Hamiltonian._dipole_to_string([self._x_dipole_shift,
-                                               self._y_dipole_shift, self._z_dipole_shift])))
-            lines.append('  - particle hole part: {}'.format(
-                Hamiltonian._dipole_to_string([self._ph_x_dipole_shift,
-                                               self._ph_y_dipole_shift, self._ph_z_dipole_shift])))
-            if self._nuclear_dipole_moment is not None:
-                if self._reverse_dipole_sign:
-                    _elec_dipole = -_elec_dipole
-                dipole_moment = self._nuclear_dipole_moment + _elec_dipole
-                total_dipole_moment = np.sqrt(np.sum(np.power(dipole_moment, 2)))
-                lines.append('~ Nuclear dipole moment (a.u.): {}'.format(
-                    Hamiltonian._dipole_to_string(self._nuclear_dipole_moment)))
-                lines.append('> Dipole moment (a.u.): {}  Total: {}'.format(
-                    Hamiltonian._dipole_to_string(dipole_moment),
-                    Hamiltonian._float_to_string(total_dipole_moment)))
-                lines.append('               (debye): {}  Total: {}'.format(
-                    Hamiltonian._dipole_to_string(dipole_moment / QMolecule.DEBYE),
-                    Hamiltonian._float_to_string(total_dipole_moment / QMolecule.DEBYE)))
-                result['nuclear_dipole_moment'] = self._nuclear_dipole_moment
-                result['electronic_dipole_moment'] = _elec_dipole
-                result['dipole_moment'] = dipole_moment
-                result['total_dipole_moment'] = total_dipole_moment
-
-        return lines, result
+        return result
 
     @staticmethod
-    def _try_reduce_fermionic_operator(fer_op, freeze_list, remove_list):
+    def _try_reduce_fermionic_operator(fer_op: FermionicOperator,
+                                       freeze_list: List,
+                                       remove_list: List) -> Tuple:
+        """
+        Trying to reduce the fermionic operator w.r.t to freeze and remove list if provided
+
+        Args:
+            fer_op: fermionic operator
+            freeze_list: freeze list of orbitals
+            remove_list: remove list of orbitals
+
+        Returns:
+            (fermionic_operator, energy_shift, did_shift)
+        """
         # pylint: disable=len-as-condition
         did_shift = False
         energy_shift = 0.0
@@ -538,21 +539,23 @@ class Hamiltonian(ChemistryOperator):
         return fer_op, energy_shift, did_shift
 
     @staticmethod
-    def _map_fermionic_operator_to_qubit(fer_op, qubit_mapping, num_particles, two_qubit_reduction):
+    def _map_fermionic_operator_to_qubit(fer_op: FermionicOperator,
+                                         qubit_mapping: str,
+                                         num_particles: List[int],
+                                         two_qubit_reduction: bool) -> WeightedPauliOperator:
+        """
+
+        Args:
+            fer_op: Fermionic Operator
+            qubit_mapping: fermionic to qubit mapping
+            num_particles: number of particles
+            two_qubit_reduction: two qubit reduction
+
+        Returns:
+            qubit operator
+        """
+
         qubit_op = fer_op.mapping(map_type=qubit_mapping, threshold=0.00000001)
         if qubit_mapping == 'parity' and two_qubit_reduction:
             qubit_op = Z2Symmetries.two_qubit_reduction(qubit_op, num_particles)
         return qubit_op
-
-    @staticmethod
-    def _dipole_to_string(_dipole):
-        dips = [round(x, 8) for x in _dipole]
-        value = '['
-        for i, _ in enumerate(dips):
-            value += Hamiltonian._float_to_string(dips[i])
-            value += '  ' if i < len(dips) - 1 else ']'
-        return value
-
-    @staticmethod
-    def _float_to_string(value, precision=8):
-        return '0.0' if value == 0 else ('{:.' + str(precision) + 'f}').format(value).rstrip('0')
