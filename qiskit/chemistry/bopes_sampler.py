@@ -116,7 +116,6 @@ class BOPESSampler:
         Returns:
             The results for all points.
         """
-
         results_full = dict()
         if isinstance(self._gsc.solver, VQAlgorithm):
             self._points_optparams = dict()
@@ -145,17 +144,24 @@ class BOPESSampler:
         # find closest previously run point and take optimal parameters
         if isinstance(self._gsc.solver, VQAlgorithm) and self._bootstrap:
             prev_points = list(self._points_optparams.keys())
+            print(prev_points)
             prev_params = list(self._points_optparams.values())
             n_pp = len(prev_points)
-            # set number of points to bootstrap
-            # if self._extrapolator_wrap is None:
+
+            if n_pp > 0:
+                self._gsc.solver.initial_point = prev_params[0]
+
+        # set number of points to bootstrap
+            # if self._extrapolator_wrap is not None:
             #     n_boot = len(prev_points)  # bootstrap all points
             # else:
             #     n_boot = self._num_bootstrap
 
-            # Set initial params if prev_points not empty
+            #Set initial params if prev_points not empty
             # if prev_points:
             #     if n_pp <= n_boot:
+            #         print('n_boot', n_boot)
+            #         print('n_pp', n_pp)
             #         distances = np.array(point) - \
             #                     np.array(prev_points).reshape(n_pp, -1)
             #         # find min 'distance' from point to previous points
@@ -170,25 +176,22 @@ class BOPESSampler:
             #         # update initial point, note param_set is a list
             #         self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
 
-            if prev_points:
-                distances = np.array(point) - np.array(prev_points).reshape(n_pp, -1)
-                min_index = prev_points[-1] #np.argmin(np.linalg.norm(distances, axis=1))
-
-                #print('min_index', min_index)
-                # update initial point
-                self._gsc.solver.initial_point = prev_params[min_index]
+            # if prev_points:
+            #     distances = np.array(point) - np.array(prev_points).reshape(n_pp, -1)
+            #     min_index = np.argmin(np.linalg.norm(distances, axis=1))
+            #
+            #     #print('min_index', min_index)
+            #     # update initial point
+            #     self._gsc.solver.initial_point = prev_params[-1]
 
         results = self._gsc.compute_groundstate(self._driver)
-
-        logger.info("Finished Minimum Eigenvalue solve")
-        logger.info("Minimum energy: %s", results['eigenvalue'])
 
         # Save optimal point to bootstrap
         if isinstance(self._gsc.solver, VQAlgorithm):
             # at every point evaluation, the optimal params are updated
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
-            #print(self._points_optparams)
+
         print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
 
         return results
