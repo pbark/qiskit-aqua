@@ -197,12 +197,10 @@ class BOPESSampler:
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
 
-        # print('Initial params , point: ', self._gsc.solver.initial_point, point)
-        # print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
+        print('Initial params , point: ', self._gsc.solver.initial_point, point)
+        print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
         # print('Initial params , point: ', self._initial_point, point)
         # print('Optimal Params, point: ', self._points_optparams[point], point)
-        print('hello')
-
         return results
 
     # def _resampler(self) -> Tuple[float, int]:
