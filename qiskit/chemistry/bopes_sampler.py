@@ -72,20 +72,20 @@ class BOPESSampler:
         self._extrapolator_wrap = None
 
         # set wrapper and internal extrapolators
-        if extrapolators:
-            # todo: assumed len(extrapolators) == 2
-            self._extrapolator_wrap = extrapolators[0]  # wrapper
-            self._extrapolator_wrap.extrapolator = extrapolators[1]  # internal extrapolator
-            # set default number of bootstrapping points to 2
-            if num_bootstrap is None:
-                self._num_bootstrap = 2
-                self._extrapolator_wrap.window = 0
-            elif num_bootstrap >= 2:
-                self._num_bootstrap = num_bootstrap
-                self._extrapolator_wrap.window = num_bootstrap  # window for extrapolator
-            else:
-                raise AquaError(
-                    'num_bootstrap must be None or an integer greater than or equal to 2')
+        # if extrapolators:
+        #     # todo: assumed len(extrapolators) == 2
+        #     self._extrapolator_wrap = extrapolators[0]  # wrapper
+        #     self._extrapolator_wrap.extrapolator = extrapolators[1]  # internal extrapolator
+        #     # set default number of bootstrapping points to 2
+        #     if num_bootstrap is None:
+        #         self._num_bootstrap = 2
+        #         self._extrapolator_wrap.window = 0
+        #     elif num_bootstrap >= 2:
+        #         self._num_bootstrap = num_bootstrap
+        #         self._extrapolator_wrap.window = num_bootstrap  # window for extrapolator
+        #     else:
+        #         raise AquaError(
+        #             'num_bootstrap must be None or an integer greater than or equal to 2')
 
         if isinstance(self._gsc.solver, VQAlgorithm):
             # Save initial point passed to min_eigensolver;
@@ -138,18 +138,19 @@ class BOPESSampler:
         Returns:
             Results for a single point.
         """
+
+        # update molecule geometry and  thus resulting Hamiltonian based on specified point
         self._driver.molecule.perturbations = [point]
 
-        print('Initial params , point: ', self._gsc.solver.initial_point, point)
         # find closest previously run point and take optimal parameters
-        if isinstance(self._gsc.solver, VQAlgorithm) and self._bootstrap:
-            prev_points = list(self._points_optparams.keys())
-            print(prev_points)
-            prev_params = list(self._points_optparams.values())
-            n_pp = len(prev_points)
+        # if isinstance(self._gsc.solver, VQAlgorithm) and self._bootstrap:
+        #     prev_points = list(self._points_optparams.keys())
+        #     print(prev_points)
+        #     prev_params = list(self._points_optparams.values())
+        #     n_pp = len(prev_points)
 
-            if n_pp > 0:
-                self._gsc.solver.initial_point = prev_params[0]
+        #     if n_pp > 0:
+        #         self._gsc.solver.initial_point = prev_params[0]
 
         # set number of points to bootstrap
             # if self._extrapolator_wrap is not None:
@@ -176,14 +177,18 @@ class BOPESSampler:
             #         # update initial point, note param_set is a list
             #         self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
 
-            # if prev_points:
-            #     distances = np.array(point) - np.array(prev_points).reshape(n_pp, -1)
-            #     min_index = np.argmin(np.linalg.norm(distances, axis=1))
-            #
-            #     #print('min_index', min_index)
-            #     # update initial point
-            #     self._gsc.solver.initial_point = prev_params[-1]
+        # test to bootstrap all points
+        prev_points = list(self._points_optparams.keys())
+        prev_params = list(self._points_optparams.values())
+        n_pp = len(prev_points)
+        if prev_points:
+            distances = np.array(point) - np.array(prev_points).reshape(n_pp, -1)
+            min_index = np.argmin(np.linalg.norm(distances, axis=1))
+            # update initial point
+            # self._initial_point = prev_params[min_index]
+            self._gsc.solver.initial_point = prev_params[min_index]
 
+        # compute gsc
         results = self._gsc.compute_groundstate(self._driver)
 
         # Save optimal point to bootstrap
@@ -192,7 +197,10 @@ class BOPESSampler:
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
 
-        print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
+        #print('Initial params , point: ', self._gsc.solver.initial_point, point)
+        # print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
+        #print('Initial params , point: ', self._initial_point, point)
+        #print('Optimal Params, point: ', self._points_optparams[point], point)
 
         return results
 
