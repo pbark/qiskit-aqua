@@ -145,7 +145,7 @@ class BOPESSampler:
         # find closest previously run point and take optimal parameters
         # if isinstance(self._gsc.solver, VQAlgorithm) and self._bootstrap:
         #     prev_points = list(self._points_optparams.keys())
-        #     print(prev_points)
+        # print(prev_points)
         #     prev_params = list(self._points_optparams.values())
         #     n_pp = len(prev_points)
 
@@ -197,10 +197,11 @@ class BOPESSampler:
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
 
-        #print('Initial params , point: ', self._gsc.solver.initial_point, point)
+        # print('Initial params , point: ', self._gsc.solver.initial_point, point)
         # print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
-        #print('Initial params , point: ', self._initial_point, point)
-        #print('Optimal Params, point: ', self._points_optparams[point], point)
+        # print('Initial params , point: ', self._initial_point, point)
+        # print('Optimal Params, point: ', self._points_optparams[point], point)
+        print('hello')
 
         return results
 
