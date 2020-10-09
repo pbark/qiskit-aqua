@@ -31,25 +31,17 @@ class EnergySurface1DSpline(EnergySurfaceBase):
     A simple cubic spline interpolation for the potential energy surface.
     """
 
-    def __init__(self, molecule):
+    def __init__(self):
         """
         Constructor.
         Initializes the class with a molecule.
         """
-        self.molecule = molecule
         self._eval = None
         self.eval_d = None
         self.min_x = None
         self.min_val = None
 
     # Implementing the EnergySurfaceBase interface
-
-    def update_molecule(self, molecule):
-        """
-        Wipe state if molecule changes, and check validity of molecule
-        for potential.
-        """
-        self.molecule = molecule
 
     def eval(self, x):
         """

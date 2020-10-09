@@ -65,8 +65,8 @@ class BOPESSampler:
         self._driver = driver
         self._tolerance = tolerance
         self._bootstrap = bootstrap
-        self._results = None  # minimal DataFrame of [points, energies]
-        self._results_full = None  # whole dict-of-dict-of-results
+        self.results = []  # list of Tuples of (points, energies)
+        self.results_full = None  # whole dict-of-dict-of-results
         self._points_optparams = None
         self._num_bootstrap = num_bootstrap
         self._extrapolator_wrap = None
@@ -92,7 +92,7 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def run(self, points: List[float]) -> Tuple:
+    def compute_surface(self, points: List[float]) -> Tuple:
         """Run the sampler at the given points, potentially with repetitions.
 
         Args:
@@ -102,10 +102,11 @@ class BOPESSampler:
         Returns:
             The results as pandas dataframe.
         """
+        res = self.run_points(points)
+        self.results_full = res[0]
+        self.results = res[1]
 
-        results_full = self.run_points(points)
-
-        return results_full
+        return self.results_full
 
     def run_points(self, points: List[float]) :
         """Run the sampler at the given points.
@@ -117,6 +118,7 @@ class BOPESSampler:
             The results for all points.
         """
         results_full = dict()
+        results = []
         if isinstance(self._gsc.solver, VQAlgorithm):
             self._points_optparams = dict()
             self._gsc.solver.initial_point = self._initial_point
@@ -124,10 +126,11 @@ class BOPESSampler:
         # Iterate over the points
         for i, point in enumerate(points):
             logger.info('Point %s of %s', i + 1, len(points))
-            result = self._run_single_point(point)  # execute single point here
-            results_full[point] = result
+            result_full = self._run_single_point(point)  # execute single point here
+            results_full[point] = result_full
+            results.append([result_full['point'],result_full['energy']])
 
-        return results_full
+        return results_full, results
 
     def _run_single_point(self, point: float) -> dict:
         """Run the sampler at the given single point
@@ -148,27 +151,27 @@ class BOPESSampler:
             prev_params = list(self._points_optparams.values())
             n_pp = len(prev_points)
 
-        # set number of points to bootstrap
-        if self._extrapolator_wrap is None:
-            n_boot = len(prev_points)  # bootstrap all points
-        else:
-            n_boot = self._num_bootstrap
+            # set number of points to bootstrap
+            if self._extrapolator_wrap is None:
+                n_boot = len(prev_points)  # bootstrap all points
+            else:
+                n_boot = self._num_bootstrap
 
-        # Set initial params # if prev_points not empty
-        if prev_points:
-            if n_pp <= n_boot:
-                distances = np.array(point) - \
-                            np.array(prev_points).reshape(n_pp, -1)
-                # find min 'distance' from point to previous points
-                min_index = np.argmin(np.linalg.norm(distances, axis=1))
-                # update initial point
-                self._gsc.solver.initial_point = prev_params[min_index]
-            else:  # extrapolate using saved parameters
-                opt_params = self._points_optparams
-                param_sets = self._extrapolator_wrap.extrapolate(points=[point],
-                                                                param_dict=opt_params)
-                # update initial point, note param_set is a list
-                self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
+            # Set initial params # if prev_points not empty
+            if prev_points:
+                if n_pp <= n_boot:
+                    distances = np.array(point) - \
+                                np.array(prev_points).reshape(n_pp, -1)
+                    # find min 'distance' from point to previous points
+                    min_index = np.argmin(np.linalg.norm(distances, axis=1))
+                    # update initial point
+                    self._gsc.solver.initial_point = prev_params[min_index]
+                else:  # extrapolate using saved parameters
+                    opt_params = self._points_optparams
+                    param_sets = self._extrapolator_wrap.extrapolate(points=[point],
+                                                                    param_dict=opt_params)
+                    # update initial point, note param_set is a list
+                    self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
 
         # test to bootstrap all points
         # prev_points = list(self._points_optparams.keys())
@@ -182,113 +185,18 @@ class BOPESSampler:
         #     self._gsc.solver.initial_point = prev_params[min_index]
 
         # compute gsc
-        results = self._gsc.compute_groundstate(self._driver)
-
+        results = dict(self._gsc.compute_groundstate(self._driver))
         # Save optimal point to bootstrap
         if isinstance(self._gsc.solver, VQAlgorithm):
             # at every point evaluation, the optimal params are updated
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
 
-        print('Initial params , point: ', self._gsc.solver.initial_point, point)
-        print('Optimal Params, point: ', self._gsc.solver.optimal_params, point)
-        return results
+        # Customize results dictionary
+        results['point'] = point
+        results['energy'] = np.real(results['raw_result']['eigenvalue'])
 
-    # def _resampler(self) -> Tuple[float, int]:
-    #     """Resample energy to mitigate sampling error/other noise.
-    #
-    #     Will re-evaluate energy enough times to get standard deviation below ``self._tolerance``.
-    #
-    #     Returns:
-    #         A tuple containing the resampled energy and the number of additional evaluations made.
-    #
-    #     Raises:
-    #         TypeError: If the min_eigensolver is not the VQE.
-    #         AquaError: If there's a mismatch in the objective energy and the the mean of the
-    #             callback.
-    #     """
-    #     # I only know how to make this work with VQE
-    #     if not isinstance(self._min_eigensolver, VQE):
-    #         raise TypeError('Currently only the VQE is handled as minimum eigensolver.')
-    #         # logger.info("NOT resampling (minimum eigensolver is not VQE)")
-    #         # return
-    #
-    #     optimal_parameters = self._min_eigensolver.optimal_params
-    #
-    #     # resampling is better if we can use a callback;
-    #     callback_preserver = {
-    #         'eval_count': None,
-    #         'params': None,
-    #         'mean': None,
-    #         'std': None}
-    #
-    #     def callback(eval_count, params, mean, std):
-    #         callback_preserver['eval_count'] = eval_count
-    #         callback_preserver['params'] = params
-    #         callback_preserver['mean'] = mean
-    #         callback_preserver['std'] = std
-    #
-    #     original_shots = self._min_eigensolver.quantum_instance.run_config.shots
-    #     original_callback = self._min_eigensolver._callback
-    #     self._min_eigensolver._callback = callback
-    #
-    #     # Evaluate energy one more time, at optimal parameters
-    #     # and get back standard deviation estimate (from callback)
-    #     # Calculate how many times we need to re-sample the objective
-    #     # in order to get an objective estimate with std deviation below desired tolerance
-    #     # (Averaging objective n times has variance (objective variance)/n)
-    #     extra_evals = 1
-    #     objective_val = self._min_eigensolver._energy_evaluation(optimal_parameters)
-    #     n_repeat = (callback_preserver['std'] / self._tolerance) ** 2
-    #     if not np.isclose(objective_val, callback_preserver['mean'], 1e-7):
-    #         raise AquaError("Mismatch in objective/energy in callback")
-    #
-    #     logger.info("Objective std dev: %s, repeats: %.2f", callback_preserver['std'], n_repeat)
-    #
-    #     #        oval = []
-    #     #        for i in range(40):
-    #     #            oval.append(self._min_eigensolver._energy_evaluation(optimal_parameters))
-    #     #        print("Empirical std: {}".format(np.sqrt(np.var(oval, ddof=1))))
-    #     #        print("Calced    std: {}".format(callback_preserver['std']))
-    #
-    #     if n_repeat > 1:
-    #         total_shots = int(n_repeat * original_shots)
-    #         # System limits;
-    #         # max_shots = 8192 is a hard shot limit for hardware
-    #         # max_reps controls total size of job/circuits sent
-    #         #   (depending on circuit complexity may be larger/smaller)
-    #         max_shots = 8192
-    #         max_reps = 128
-    #         total_shots = min(total_shots, max_shots * max_reps)
-    #         rounded_evals = np.round(total_shots / original_shots, decimals=2)
-    #         extra_evals += rounded_evals
-    #         logger.info("Resampling objective %s times", rounded_evals)
-    #         # Shot limit per call is 8192 (max_shots),
-    #         # so break up total shots in some number of chunks.
-    #         # If total shots is exactly divisible by 8192, great! what luck.
-    #         # If not, take the ceiling of the quotient -
-    #         # thats the number of chunks we'd have to do with at most 8192 shots each.
-    #         # Then determine shots per chunk for that number of chunks we'd
-    #         # have to do anyway
-    #         n_repeat_chunk = np.ceil(total_shots / max_shots)
-    #         chunk_shots = int(total_shots / n_repeat_chunk)
-    #         rep_param = np.repeat(np.reshape(
-    #             optimal_parameters, (1, -1)), n_repeat_chunk, axis=0).reshape(-1)
-    #         # Update shot count for resampling
-    #         self._min_eigensolver.quantum_instance.set_config(shots=chunk_shots)
-    #         # Final return value is mean of all function evaluations
-    #         objective_val = np.mean(self._min_eigensolver._energy_evaluation(rep_param))
-    #         # Note that callback_preserver['eval_count'] counts this last
-    #         # call as "one" evaluation
-    #     # else
-    #     # std deviation already below desired tolerance
-    #     # use the value already calculated
-    #     resampled_energy = objective_val
-    #
-    #     # set things back to normal
-    #     self._min_eigensolver._callback = original_callback
-    #     self._min_eigensolver.quantum_instance.set_config(shots=original_shots)
-    #     return resampled_energy, extra_evals
+        return results
 
     def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int],
                        **kwargs) -> None:
@@ -300,7 +208,7 @@ class BOPESSampler:
                 variables in the potential function fit.
             **kwargs: Arguments to pass through to the potential's ``fit_to_data`` function.
         """
-        points_all_dofs = self._results['point'].to_numpy()
+        points_all_dofs = self.results['point'].to_numpy()
         if len(points_all_dofs.shape) == 1:
             points = points_all_dofs.tolist()
         else:
