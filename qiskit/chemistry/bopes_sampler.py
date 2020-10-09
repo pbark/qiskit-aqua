@@ -38,7 +38,7 @@ class BOPESSampler:
                  tolerance: float = 1e-3,
                  bootstrap: bool = True,
                  num_bootstrap: Optional[int] = None,
-                 extrapolators: Optional[List[Extrapolator]] = None) -> None:
+                 extrapolator: Optional[Extrapolator] = None) -> None:
         """
         Args:
             gsc: GroundStateCalcualtion
@@ -51,8 +51,7 @@ class BOPESSampler:
                 bootstrapping. If no extrapolator is defined and bootstrap is True,
                 all previous points will be used for bootstrapping.
             extrapolators: Extrapolator objects that define space/window and method to extrapolate
-                variational parameters. First and second elements refer to the wrapper and internal
-                extrapolators
+                variational parameters.
 
         Raises:
             AquaError: If ``num_boostrap`` is an integer smaller than 2.
@@ -68,20 +67,16 @@ class BOPESSampler:
         self.results_full = None  # whole dict-of-dict-of-results
         self._points_optparams = None
         self._num_bootstrap = num_bootstrap
-        self._extrapolator_wrap = None
+        self._extrapolator = extrapolator
 
-        # set wrapper and internal extrapolators
-        if extrapolators:
-            # todo: # assumed len(extrapolators) == 2
-            self._extrapolator_wrap = extrapolators[0]  # wrapper
-            self._extrapolator_wrap.extrapolator = extrapolators[1]  # internal extrapolator
-            # set default number of bootstrapping points to 2
+        if extrapolator:
             if num_bootstrap is None:
+            # set default number of bootstrapping points to 2
                 self._num_bootstrap = 2
-                self._extrapolator_wrap.window = 0
+                #self._extrapolator.window = 0
             elif num_bootstrap >= 2:
                 self._num_bootstrap = num_bootstrap
-                self._extrapolator_wrap.window = num_bootstrap  # window for extrapolator
+                self._extrapolator.window = num_bootstrap  # window for extrapolator
             else:
                 raise AquaError(
                     'num_bootstrap must be None or an integer greater than or equal to 2')
@@ -162,7 +157,7 @@ class BOPESSampler:
             n_pp = len(prev_points)
 
             # set number of points to bootstrap
-            if self._extrapolator_wrap is None:
+            if self._extrapolator is None:
                 n_boot = len(prev_points)  # bootstrap all points
             else:
                 n_boot = self._num_bootstrap
@@ -178,7 +173,7 @@ class BOPESSampler:
                     self._gsc.solver.initial_point = prev_params[min_index]
                 else:  # extrapolate using saved parameters
                     opt_params = self._points_optparams
-                    param_sets = self._extrapolator_wrap.extrapolate(points=[point],
+                    param_sets = self._extrapolator.extrapolate(points=[point],
                                                                     param_dict=opt_params)
                     # update initial point, note param_set is a list
                     self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
