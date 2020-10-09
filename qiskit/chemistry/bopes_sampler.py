@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 from qiskit.aqua import AquaError
 from qiskit.aqua.algorithms import VQAlgorithm, VQE, MinimumEigensolver
-
 from .energy_surface_spline import EnergySurfaceBase
 from .extrapolator import Extrapolator
 from qiskit.chemistry.drivers import BaseDriver
@@ -65,7 +64,7 @@ class BOPESSampler:
         self._driver = driver
         self._tolerance = tolerance
         self._bootstrap = bootstrap
-        self.results = []  # list of Tuples of (points, energies)
+        self.results = dict()  # list of Tuples of (points, energies)
         self.results_full = None  # whole dict-of-dict-of-results
         self._points_optparams = None
         self._num_bootstrap = num_bootstrap
@@ -102,11 +101,22 @@ class BOPESSampler:
         Returns:
             The results as pandas dataframe.
         """
-        res = self.run_points(points)
-        self.results_full = res[0]
-        self.results = res[1]
+        ## tuple corresponding to full dictionary of results, (point, energy) results only
+        #res = self.run_points(points)
+        #self.results_full = res[0]
+        #self.results = res[1]
 
-        return self.results_full
+        # full dictionary of points
+        self.results_full = self.run_points(points)
+        # create results dictionary with (point, energy)
+        self.results['point'] = list(self.results_full.keys())
+        energies = []
+        for key in self.results_full:
+            energy = self.results_full[key]['computed_electronic_energy'] + self.results_full[key]['nuclear_repulsion_energy']
+            energies.append(energy)
+        self.results['energy'] = energies
+
+        return self.results_full, self.results
 
     def run_points(self, points: List[float]) :
         """Run the sampler at the given points.
@@ -126,11 +136,11 @@ class BOPESSampler:
         # Iterate over the points
         for i, point in enumerate(points):
             logger.info('Point %s of %s', i + 1, len(points))
-            result_full = self._run_single_point(point)  # execute single point here
+            result_full = self._run_single_point(point)  # dict of results
             results_full[point] = result_full
-            results.append([result_full['point'],result_full['energy']])
+            #results.append([result_full['point'], result_full['energy']])
 
-        return results_full, results
+        return results_full
 
     def _run_single_point(self, point: float) -> dict:
         """Run the sampler at the given single point
@@ -193,8 +203,8 @@ class BOPESSampler:
             self._points_optparams[point] = optimal_params
 
         # Customize results dictionary
-        results['point'] = point
-        results['energy'] = np.real(results['raw_result']['eigenvalue'])
+        # results['point'] = point
+        # results['energy'] = np.real(results['raw_result']['eigenvalue'])
 
         return results
 
@@ -208,11 +218,13 @@ class BOPESSampler:
                 variables in the potential function fit.
             **kwargs: Arguments to pass through to the potential's ``fit_to_data`` function.
         """
-        points_all_dofs = self.results['point'].to_numpy()
+        # points_all_dofs = self.results['point'].to_numpy()
+        points_all_dofs = self.results['point']
         if len(points_all_dofs.shape) == 1:
             points = points_all_dofs.tolist()
         else:
             points = points_all_dofs[:, dofs].tolist()
 
-        energies = self._results['energy'].to_list()
+        # energies = self.results['energy'].to_list()
+        energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)

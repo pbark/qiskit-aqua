@@ -61,9 +61,13 @@ class EnergySurface1DSpline(EnergySurfaceBase):
         return result
 
     def fit_to_data(self, xdata, ydata, initial_vals=None, bounds_list=None):
-        newx = np.unique(xdata)
-        newy = [np.average(ydata[np.where(xdata == val)])
-                for val in np.unique(xdata)]
+        ## TODO: remove, no need for duplicate checking
+        # newx = np.unique(xdata)
+        # # new y is average of all repeated values
+        # newy = [np.average(ydata[np.where(xdata == val)[0]])
+        #         for val in np.unique(xdata)]
+        newx = xdata
+        newy = ydata
 
         tck = interp.splrep(newx, newy, k=3)
 
@@ -77,7 +81,7 @@ class EnergySurface1DSpline(EnergySurfaceBase):
         self.min_val = result.fun
         self.x_left = min(xdata)
         self.x_right = max(xdata)
-        
+
 
     def get_equilibrium_geometry(self, scaling=1.0):
         """
@@ -99,7 +103,7 @@ class EnergySurface1DSpline(EnergySurfaceBase):
 
     def get_trust_region(self):
         """
-        Returns the bounds of the region (in space) where the energy 
+        Returns the bounds of the region (in space) where the energy
         surface implementation can be trusted. When doing spline
         interpolation, for example, that would be the region where data
         is interpolated (vs. extrapolated) from the arguments of

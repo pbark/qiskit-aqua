@@ -22,14 +22,15 @@ class EnergySurfaceBase(ABC):
     """ Class to hold a potential energy surface """
 
     def __init__(self, molecule):
-        self.update_molecule(molecule)
+        pass
+    # self.update_molecule(molecule)
 
-    @abstractmethod
-    def update_molecule(self, molecule):
-        """
-        Wipe state if molecule changes, and check validity of molecule
-        for potential.
-        """
+    # @abstractmethod
+    # def update_molecule(self, molecule):
+    #     """
+    #     Wipe state if molecule changes, and check validity of molecule
+    #     for potential.
+    #     """
 
     @abstractmethod
     def eval(self, x):
@@ -65,14 +66,14 @@ class EnergySurfaceBase(ABC):
     @abstractmethod
     def get_trust_region(self):
         """
-        Returns the bounds of the region (in space) where the energy 
+        Returns the bounds of the region (in space) where the energy
         surface implementation can be trusted. When doing spline
         interpolation, for example, that would be the region where data
         is interpolated (vs. extrapolated) from the arguments of
         fit_to_data().
         """
         raise NotImplementedError
-        
+
 class VibronicStructureBase(ABC):
     """
     Class to hold a molecular vibronic structure providing access to
@@ -100,7 +101,7 @@ class VibronicStructureBase(ABC):
         raise NotImplementedError
 
     def get_maximum_trusted_level(self, mode=0):
-        """ 
+        """
         Returns the maximum energy level for which the particular
         implementation still provides a good approximation of reality.
         Default value of 100. Redefined where needed (see e.g. Morse).
@@ -110,7 +111,7 @@ class VibronicStructureBase(ABC):
     '''
     # TODO: Do we need these? Does every vibrational mode have a fundamental
     #       frequency (e.g. when it is anharmonic)?
-    
+
     @abstractmethod
     def fundamental_frequency(self, mode=0):
         """ returns the fundamental frequency for a given mode """
@@ -127,19 +128,19 @@ class PotentialBase(EnergySurfaceBase, VibronicStructureBase):
     Class to hold prescribed 1D potentials (e.g. Morse/Harmonic)
     over a degree of freedom.
     """
-        
+
     def get_num_modes(self):
         """ This (1D) potential represents a single vibrational mode """
         return 1
-    
+
     def get_trust_region(self):
         """
         The potential will usually be well-defined (even if not useful) for
-        arbitrary x so we return a fairly large interval here. 
+        arbitrary x so we return a fairly large interval here.
         Redefine in derived classes if needed.
         """
         return (-100, 100)
-    
+
 
     @abstractmethod
     def dissociation_energy(self, scaling=1.0):
