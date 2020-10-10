@@ -47,11 +47,11 @@ class BOPESSampler:
             bootstrap: Whether to warm-start the solve of variational minimum eigensolvers.
             num_bootstrap: Number of previous points for extrapolation
                 and bootstrapping. If None and a list of extrapolators is defined,
-                all prev points will be used except the first two points will be used for
-                bootstrapping. If no extrapolator is defined and bootstrap is True,
+                the first two points will be used for bootstrapping.
+                If no extrapolator is defined and bootstrap is True,
                 all previous points will be used for bootstrapping.
-            extrapolators: Extrapolator objects that define space/window and method to extrapolate
-                variational parameters.
+            extrapolators: Extrapolator objects that define space/window
+                           and method to extrapolate variational parameters.
 
         Raises:
             AquaError: If ``num_boostrap`` is an integer smaller than 2.

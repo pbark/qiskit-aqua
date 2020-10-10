@@ -75,7 +75,7 @@ class Extrapolator(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def factory(cls, mode: str, **kwargs) -> 'Extrapolator':
+    def factory(cls, mode: str, kwargs={}) -> 'Extrapolator':
         """
         Factory method for constructing extrapolators.
 
