@@ -94,13 +94,8 @@ class BOPESSampler:
             points: The points along the degrees of freedom to evaluate.
 
         Returns:
-            The results as pandas dataframe.
+            BOPES Sampler Results
         """
-        ## tuple corresponding to full dictionary of results, (point, energy) results only
-        # res = self.run_points(points)
-        # self.results_full = res[0]
-        # self.results = res[1]
-
         # full dictionary of points
         self.results_full = self.run_points(points)
         # create results dictionary with (point, energy)
@@ -181,28 +176,12 @@ class BOPESSampler:
                     # param set is a dictionary
                     self._gsc.solver.initial_point = param_sets.get(point)
 
-        # test to bootstrap all points
-        # prev_points = list(self._points_optparams.keys())
-        # prev_params = list(self._points_optparams.values())
-        # n_pp = len(prev_points)
-        # if prev_points:
-        #     distances = np.array(point) - np.array(prev_points).reshape(n_pp, -1)
-        #     min_index = np.argmin(np.linalg.norm(distances, axis=1))
-        #     # update initial point
-        #     # self._initial_point = prev_params[min_index]
-        #     self._gsc.solver.initial_point = prev_params[min_index]
-
-        # compute gsc
         results = dict(self._gsc.compute_groundstate(self._driver))
         # Save optimal point to bootstrap
         if isinstance(self._gsc.solver, VQAlgorithm):
             # at every point evaluation, the optimal params are updated
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
-
-        # Customize results dictionary
-        # results['point'] = point
-        # results['energy'] = np.real(results['raw_result']['eigenvalue'])
 
         return results
 
@@ -216,14 +195,7 @@ class BOPESSampler:
                 variables in the potential function fit.
             **kwargs: Arguments to pass through to the potential's ``fit_to_data`` function.
         """
-        # points_all_dofs = self.results['point'].to_numpy()
-        points_all_dofs = self.results['point']
-        if len(points_all_dofs.shape) == 1:
-            points = points_all_dofs.tolist()
-        else:
-            points = points_all_dofs[:, dofs].tolist()
-
-        # energies = self.results['energy'].to_list()
+        points = self.results['point']
         energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
 
