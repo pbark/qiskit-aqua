@@ -111,7 +111,9 @@ class BOPESSampler:
             energies.append(energy)
         self.results['energy'] = energies
 
-        return self.results_full, self.results
+        BOPESresult = BOPESSamplerResult(self.results, self.results_full)
+        
+        return BOPESresult
 
     def run_points(self, points: List[float]) :
         """Run the sampler at the given points.
@@ -223,3 +225,30 @@ class BOPESSampler:
         # energies = self.results['energy'].to_list()
         energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
+
+
+class BOPESSamplerResult:
+    
+    def __init__(self, results, results_full):
+        
+        self._results = results
+        self._results_full = results_full
+        
+    @property
+    def points(self) -> list:
+        """ returns list of points"""
+        return self._results.get('point')
+    
+    @property
+    def energies(self) -> list:
+        """ returns list of energies"""
+        return self._results.get('energy')
+    
+    @property
+    def full_results(self) -> dict:
+        """ returns all results for all points"""
+        return self._results_full
+    
+    def point_results(self, point) -> dict:
+        """ returns all results for all points"""
+        return self._results_full[point]
