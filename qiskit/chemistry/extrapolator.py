@@ -21,9 +21,9 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Union
 
 import numpy as np
+from qiskit.aqua import AquaError
 from sklearn import linear_model
 from sklearn.decomposition import PCA, KernelPCA
-from qiskit.aqua import AquaError
 
 
 class Extrapolator(ABC):
@@ -75,7 +75,7 @@ class Extrapolator(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def factory(cls, mode: str, kwargs={}) -> 'Extrapolator':
+    def factory(cls, mode: str, **kwargs) -> 'Extrapolator':
         """
         Factory method for constructing extrapolators.
 
