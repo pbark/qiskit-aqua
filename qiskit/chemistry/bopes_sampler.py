@@ -64,7 +64,6 @@ class BOPESSampler:
         self._tolerance = tolerance
         self._bootstrap = bootstrap
         self.results = dict()  # list of Tuples of (points, energies)
-        # whole dict-of-dict-of-results
         self.results_full = None  # type: Optional[Dict]
         self._points_optparams = None  # type: Optional[Dict]
         self._num_bootstrap = num_bootstrap
