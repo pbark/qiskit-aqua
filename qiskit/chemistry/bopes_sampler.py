@@ -17,16 +17,16 @@ import logging
 from typing import Optional, Tuple, List, Dict
 
 import numpy as np
-import pandas as pd
 from qiskit.aqua import AquaError
-from qiskit.aqua.algorithms import VQAlgorithm, VQE, MinimumEigensolver
-from .energy_surface_spline import EnergySurfaceBase
-from .extrapolator import Extrapolator
+from qiskit.aqua.algorithms import VQAlgorithm
 from qiskit.chemistry.drivers import BaseDriver
 from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
-from qiskit.chemistry.drivers.molecule import Molecule
+
+from .energy_surface_spline import EnergySurfaceBase
+from .extrapolator import Extrapolator
 
 logger = logging.getLogger(__name__)
+
 
 class BOPESSampler:
     """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES).
@@ -41,7 +41,7 @@ class BOPESSampler:
                  extrapolator: Optional[Extrapolator] = None) -> None:
         """
         Args:
-            gsc: GroundStateCalcualtion
+            gsc: GroundStateCalculation
             driver: BaseDriver
             tolerance: Tolerance desired for minimum energy.
             bootstrap: Whether to warm-start the solve of variational minimum eigensolvers.
@@ -50,30 +50,31 @@ class BOPESSampler:
                 the first two points will be used for bootstrapping.
                 If no extrapolator is defined and bootstrap is True,
                 all previous points will be used for bootstrapping.
-            extrapolators: Extrapolator objects that define space/window
+            extrapolator: Extrapolator objects that define space/window
                            and method to extrapolate variational parameters.
 
         Raises:
             AquaError: If ``num_boostrap`` is an integer smaller than 2.
         """
 
-        #TODO add a check the driver has a molecule
+        # TODO add a check the driver has a molecule
 
         self._gsc = gsc
         self._driver = driver
         self._tolerance = tolerance
         self._bootstrap = bootstrap
         self.results = dict()  # list of Tuples of (points, energies)
-        self.results_full = None  # whole dict-of-dict-of-results
-        self._points_optparams = None
+        # whole dict-of-dict-of-results
+        self.results_full = None  # type: Optional[Dict]
+        self._points_optparams = None  # type: Optional[Dict]
         self._num_bootstrap = num_bootstrap
         self._extrapolator = extrapolator
 
         if extrapolator:
             if num_bootstrap is None:
-            # set default number of bootstrapping points to 2
+                # set default number of bootstrapping points to 2
                 self._num_bootstrap = 2
-                #self._extrapolator.window = 0
+                # self._extrapolator.window = 0
             elif num_bootstrap >= 2:
                 self._num_bootstrap = num_bootstrap
                 self._extrapolator.window = num_bootstrap  # window for extrapolator
@@ -91,15 +92,14 @@ class BOPESSampler:
 
         Args:
             points: The points along the degrees of freedom to evaluate.
-            reps: Number of independent repetitions of this overall calculation.
 
         Returns:
             The results as pandas dataframe.
         """
         ## tuple corresponding to full dictionary of results, (point, energy) results only
-        #res = self.run_points(points)
-        #self.results_full = res[0]
-        #self.results = res[1]
+        # res = self.run_points(points)
+        # self.results_full = res[0]
+        # self.results = res[1]
 
         # full dictionary of points
         self.results_full = self.run_points(points)
@@ -107,13 +107,14 @@ class BOPESSampler:
         self.results['point'] = list(self.results_full.keys())
         energies = []
         for key in self.results_full:
-            energy = self.results_full[key]['computed_electronic_energy'] + self.results_full[key]['nuclear_repulsion_energy']
+            energy = self.results_full[key]['computed_electronic_energy'] + \
+                     self.results_full[key]['nuclear_repulsion_energy']
             energies.append(energy)
         self.results['energy'] = energies
 
         return self.results_full, self.results
 
-    def run_points(self, points: List[float]) :
+    def run_points(self, points: List[float]) -> Dict:
         """Run the sampler at the given points.
 
         Args:
@@ -123,7 +124,6 @@ class BOPESSampler:
             The results for all points.
         """
         results_full = dict()
-        results = []
         if isinstance(self._gsc.solver, VQAlgorithm):
             self._points_optparams = dict()
             self._gsc.solver.initial_point = self._initial_point
@@ -133,7 +133,7 @@ class BOPESSampler:
             logger.info('Point %s of %s', i + 1, len(points))
             result_full = self._run_single_point(point)  # dict of results
             results_full[point] = result_full
-            #results.append([result_full['point'], result_full['energy']])
+            # results.append([result_full['point'], result_full['energy']])
 
         return results_full
 
@@ -174,9 +174,10 @@ class BOPESSampler:
                 else:  # extrapolate using saved parameters
                     opt_params = self._points_optparams
                     param_sets = self._extrapolator.extrapolate(points=[point],
-                                                                    param_dict=opt_params)
+                                                                param_dict=opt_params)
                     # update initial point, note param_set is a list
-                    self._gsc.solver.initial_point = param_sets.get(point)  # param set is a dictionary
+                    # param set is a dictionary
+                    self._gsc.solver.initial_point = param_sets.get(point)
 
         # test to bootstrap all points
         # prev_points = list(self._points_optparams.keys())
