@@ -4,7 +4,6 @@
 import unittest
 import numpy as np
 from functools import partial
-# Qiskit components
 from qiskit import Aer
 from qiskit.aqua import QuantumInstance
 from qiskit.circuit.library import RealAmplitudes
@@ -17,9 +16,6 @@ from qiskit.chemistry.drivers import Molecule, PySCFDriver
 from qiskit.chemistry.qubit_transformations import FermionicTransformation
 from qiskit.chemistry.ground_state_calculation import MinimumEigensolverGroundStateCalculation
 from qiskit.chemistry.morse_potential import MorsePotential
-import qiskit.chemistry.constants as const
-
-# TODO Fix this test
 
 class TestBOPES(unittest.TestCase):
 
