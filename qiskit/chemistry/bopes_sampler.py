@@ -58,6 +58,7 @@ class BOPESSampler:
         """
 
         # TODO add a check the driver has a molecule
+        # TODO move driver to compute_surface
 
         self._gsc = gsc
         self._driver = driver
@@ -200,7 +201,9 @@ class BOPESSampler:
 
 
 class BOPESSamplerResult:
-    
+
+    #TODO BOPESSamplerResult(AlgorithmResult)
+
     def __init__(self, results, results_full):
         
         self._results = results
