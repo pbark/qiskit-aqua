@@ -27,35 +27,6 @@ from .extrapolator import Extrapolator, WindowExtrapolator
 
 logger = logging.getLogger(__name__)
 
-
-class BOPESSamplerResult:
-    """This result class provides a structured view to results obtained by ``BOPESSample``."""
-    # TODO BOPESSamplerResult(AlgorithmResult)
-
-    def __init__(self, results, results_full):
-        self._results = results
-        self._results_full = results_full
-
-    @property
-    def points(self) -> list:
-        """ returns list of points"""
-        return self._results.get('point')
-
-    @property
-    def energies(self) -> list:
-        """ returns list of energies"""
-        return self._results.get('energy')
-
-    @property
-    def full_results(self) -> dict:
-        """ returns all results for all points"""
-        return self._results_full
-
-    def point_results(self, point) -> dict:
-        """ returns all results for all points"""
-        return self._results_full[point]
-
-
 class BOPESSampler:
     """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES)."""
 
@@ -83,9 +54,6 @@ class BOPESSampler:
         Raises:
             AquaError: If ``num_boostrap`` is an integer smaller than 2.
         """
-
-        # TODO add a check the driver has a molecule
-        # TODO move driver to compute_surface
 
         self._gsc = gsc
         self._driver = driver
@@ -222,8 +190,7 @@ class BOPESSampler:
 
         return results
 
-    # TODO: are dofs required in this method?
-    def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int], **kwargs) -> None:
+    def fit_to_surface(self, energy_surface: EnergySurfaceBase, **kwargs) -> None:
         """Fit the sampled energy points to the energy surface.
 
         Args:
@@ -235,4 +202,3 @@ class BOPESSampler:
         points = self.results['point']
         energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
-
