@@ -18,10 +18,8 @@ Created on Mon Mar 30 10:30:21 2020
 @author: dtrenev
 """
 
-import numpy as np
 import scipy.interpolate as interp
 from scipy.optimize import minimize_scalar
-
 
 from .potential_base import EnergySurfaceBase
 
@@ -82,7 +80,6 @@ class EnergySurface1DSpline(EnergySurfaceBase):
         self.x_left = min(xdata)
         self.x_right = max(xdata)
 
-
     def get_equilibrium_geometry(self, scaling=1.0):
         """
         Returns the geometry for the minimal energy (scaled by 'scaling')
@@ -110,4 +107,3 @@ class EnergySurface1DSpline(EnergySurfaceBase):
         fit_to_data().
         """
         return (self.x_left, self.x_right)
-

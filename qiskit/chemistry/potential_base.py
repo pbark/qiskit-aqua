@@ -74,6 +74,7 @@ class EnergySurfaceBase(ABC):
         """
         raise NotImplementedError
 
+
 class VibronicStructureBase(ABC):
     """
     Class to hold a molecular vibronic structure providing access to
@@ -140,7 +141,6 @@ class PotentialBase(EnergySurfaceBase, VibronicStructureBase):
         Redefine in derived classes if needed.
         """
         return (-100, 100)
-
 
     @abstractmethod
     def dissociation_energy(self, scaling=1.0):

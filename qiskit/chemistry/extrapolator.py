@@ -21,9 +21,9 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Union
 
 import numpy as np
-from qiskit.aqua import AquaError
 from sklearn import linear_model
 from sklearn.decomposition import PCA, KernelPCA
+from qiskit.aqua import AquaError
 
 
 class Extrapolator(ABC):
@@ -106,103 +106,6 @@ class Extrapolator(ABC):
             return SieveExtrapolator(**kwargs)
         else:
             raise AquaError('No extrapolator called {}'.format(mode))
-
-
-class WindowExtrapolator(Extrapolator):
-    """
-    An extrapolator which wraps another extrapolator, limiting the internal extrapolator's
-    ground truth parameter set to a fixed window size.
-    """
-
-    def __init__(self,
-                 extrapolator: Union['PolynomialExtrapolator',
-                                     'DifferentialExtrapolator'] = None,
-                 window: int = 2) -> None:
-        """
-        Constructor.
-
-        Args:
-            extrapolator: 'internal' extrapolator that performs extrapolation on
-                variational parameters based on data window
-
-            window: Number of previous points to use for extrapolation. A value of zero
-                indicates that all previous points will be used for bootstrapping.
-        """
-        self._extrapolator = extrapolator
-        self._window = window
-
-    def extrapolate(self, points: List[float], param_dict: Optional[Dict[float, List[float]]]) \
-            -> Dict[float, List[float]]:
-        """
-        Extrapolate at specified point of interest given a set of variational parameters.
-        Based on the specified window, a subset of the data points will be used for
-        extrapolation. A default window of 2 points is used, while a value of zero indicates
-        that all previous points will be used for extrapolation. This method defines the
-        data window before performing the internal extrapolation.
-
-        Args:
-            points: List of point(s) to be used for extrapolation. Can represent
-                some degree of freedom, ex, interatomic distance.
-            param_dict: Dictionary of variational parameters. Each key is the point
-                and the value is a list of the variational parameters.
-
-        Returns:
-            Dictionary of variational parameters for extrapolated point(s).
-        """
-        ret_params = {}
-        sorted_points = sorted(points)
-        reference_points = [pt for pt in sorted(param_dict.keys()) if pt < max(sorted_points)]
-
-        for bottom_index, bottom in enumerate(reference_points):
-            if bottom_index < len(reference_points) - 1:
-                top = reference_points[bottom_index + 1]
-            else:
-                top = float('inf')
-            extrapolation_group = [pt for pt in sorted_points if bottom < pt <= top]
-            window_points = [pt for pt in reference_points if pt <= bottom]
-            if len(window_points) > self._window:
-                window_points = window_points[-self._window:]
-            window_param_dict = {pt: param_dict[pt] for pt in window_points}
-            if extrapolation_group:
-                ret_params.update(self._extrapolator.extrapolate(extrapolation_group,
-                                                                 param_dict=window_param_dict))
-        return ret_params
-
-    @property
-    def extrapolator(self) -> Extrapolator:
-        """Returns the internal extrapolator.
-
-        Returns:
-            The internal extrapolator.
-        """
-        return self._extrapolator
-
-    @extrapolator.setter
-    def extrapolator(self, extrapolator: Extrapolator) -> None:
-        """Sets the internal extrapolator.
-
-        Args:
-            extrapolator: The internal extrapolator to set.
-        """
-        self._extrapolator = extrapolator
-
-    @property
-    def window(self) -> int:
-        """Returns the size of the window.
-
-        Returns:
-            The size of the window.
-        """
-        return self._window
-
-    @window.setter
-    def window(self, window: int) -> None:
-        """Set the size of the window
-
-        Args:
-            window: the size of the window to set.
-        """
-        self._window = window
 
 
 class PolynomialExtrapolator(Extrapolator):
@@ -318,6 +221,104 @@ class DifferentialExtrapolator(Extrapolator):
         return ret_params
 
 
+class WindowExtrapolator(Extrapolator):
+    """
+    An extrapolator which wraps another extrapolator, limiting the internal extrapolator's
+    ground truth parameter set to a fixed window size.
+    """
+
+    def __init__(self,
+                 extrapolator: Union[PolynomialExtrapolator,
+                                     DifferentialExtrapolator] = None,
+                 window: int = 2) -> None:
+        """
+        Constructor.
+
+        Args:
+            extrapolator: 'internal' extrapolator that performs extrapolation on
+                variational parameters based on data window
+
+            window: Number of previous points to use for extrapolation. A value of zero
+                indicates that all previous points will be used for bootstrapping.
+        """
+        self._extrapolator = extrapolator
+        self._window = window
+
+    def extrapolate(self, points: List[float], param_dict: Optional[Dict[float, List[float]]]) \
+            -> Dict[float, List[float]]:
+        """
+        Extrapolate at specified point of interest given a set of variational parameters.
+        Based on the specified window, a subset of the data points will be used for
+        extrapolation. A default window of 2 points is used, while a value of zero indicates
+        that all previous points will be used for extrapolation. This method defines the
+        data window before performing the internal extrapolation.
+
+        Args:
+            points: List of point(s) to be used for extrapolation. Can represent
+                some degree of freedom, ex, interatomic distance.
+            param_dict: Dictionary of variational parameters. Each key is the point
+                and the value is a list of the variational parameters.
+
+        Returns:
+            Dictionary of variational parameters for extrapolated point(s).
+        """
+        ret_params = {}
+        sorted_points = sorted(points)
+        reference_points = [pt for pt in sorted(param_dict.keys()) if pt < max(sorted_points)]
+
+        for bottom_index, bottom in enumerate(reference_points):
+            if bottom_index < len(reference_points) - 1:
+                top = reference_points[bottom_index + 1]
+            else:
+                top = float('inf')
+            extrapolation_group = [pt for pt in sorted_points if bottom < pt <= top]
+            window_points = [pt for pt in reference_points if pt <= bottom]
+            if len(window_points) > self._window:
+                window_points = window_points[-self._window:]
+            window_param_dict = {pt: param_dict[pt] for pt in window_points}
+            if extrapolation_group:
+                ret_params.update(self._extrapolator.extrapolate(extrapolation_group,
+                                                                 param_dict=window_param_dict))
+        return ret_params
+
+    @property
+    def extrapolator(self) -> Extrapolator:
+        """Returns the internal extrapolator.
+
+        Returns:
+            The internal extrapolator.
+        """
+        return self._extrapolator
+
+    @extrapolator.setter
+    def extrapolator(self, extrapolator: Union[PolynomialExtrapolator,
+                                               DifferentialExtrapolator]) -> None:
+        """Sets the internal extrapolator.
+
+        Args:
+            extrapolator: The internal extrapolator to set.
+        """
+        self._extrapolator = extrapolator
+
+    @property
+    def window(self) -> int:
+        """Returns the size of the window.
+
+        Returns:
+            The size of the window.
+        """
+        return self._window
+
+    @window.setter
+    def window(self, window: int) -> None:
+        """Set the size of the window
+
+        Args:
+            window: the size of the window to set.
+        """
+        self._window = window
+
+
 class PCAExtrapolator(Extrapolator):
     """
     A wrapper extrapolator which reduces the points' dimensionality with PCA,
@@ -327,8 +328,8 @@ class PCAExtrapolator(Extrapolator):
     """
 
     def __init__(self,
-                 extrapolator: Optional[Union['PolynomialExtrapolator',
-                                              'DifferentialExtrapolator']] = None,
+                 extrapolator: Optional[Union[PolynomialExtrapolator,
+                                              DifferentialExtrapolator]] = None,
                  kernel: Optional[str] = None,
                  window: int = 2) -> None:
         """
@@ -389,8 +390,8 @@ class SieveExtrapolator(Extrapolator):
     """
 
     def __init__(self,
-                 extrapolator: Optional[Union['PolynomialExtrapolator',
-                                              'DifferentialExtrapolator']] = None,
+                 extrapolator: Optional[Union[PolynomialExtrapolator,
+                                              DifferentialExtrapolator]] = None,
                  window: int = 2,
                  filter_before: bool = True,
                  filter_after: bool = True) -> None:

@@ -14,7 +14,7 @@
 """The calculation of points on the Born-Oppenheimer Potential Energy Surface (BOPES)."""
 
 import logging
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, List, Dict
 
 import numpy as np
 from qiskit.aqua import AquaError
@@ -23,14 +23,41 @@ from qiskit.chemistry.drivers import BaseDriver
 from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
 from qiskit.chemistry.results.bopes_sampler_result import BOPESSamplerResult
 from .energy_surface_spline import EnergySurfaceBase
-from .extrapolator import Extrapolator
+from .extrapolator import Extrapolator, WindowExtrapolator
 
 logger = logging.getLogger(__name__)
 
 
+class BOPESSamplerResult:
+    """This result class provides a structured view to results obtained by ``BOPESSample``."""
+    # TODO BOPESSamplerResult(AlgorithmResult)
+
+    def __init__(self, results, results_full):
+        self._results = results
+        self._results_full = results_full
+
+    @property
+    def points(self) -> list:
+        """ returns list of points"""
+        return self._results.get('point')
+
+    @property
+    def energies(self) -> list:
+        """ returns list of energies"""
+        return self._results.get('energy')
+
+    @property
+    def full_results(self) -> dict:
+        """ returns all results for all points"""
+        return self._results_full
+
+    def point_results(self, point) -> dict:
+        """ returns all results for all points"""
+        return self._results_full[point]
+
+
 class BOPESSampler:
-    """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES).
-    """
+    """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES)."""
 
     def __init__(self,
                  gsc: GroundStateCalculation,
@@ -70,12 +97,15 @@ class BOPESSampler:
         self._num_bootstrap = num_bootstrap
         self._extrapolator = extrapolator
 
-        if extrapolator:
+        if self._extrapolator:
             if num_bootstrap is None:
                 # set default number of bootstrapping points to 2
                 self._num_bootstrap = 2
-                # self._extrapolator.window = 0
             elif num_bootstrap >= 2:
+                if not isinstance(self._extrapolator, WindowExtrapolator):
+                    raise AquaError(
+                        'If num_bootstrap >= 2 then the extrapolator must be an instance '
+                        'of WindowExtrapolator, got {} instead'.format(self._extrapolator))
                 self._num_bootstrap = num_bootstrap
                 self._extrapolator.window = num_bootstrap  # window for extrapolator
             else:
@@ -114,9 +144,9 @@ class BOPESSampler:
             energies.append(energy)
         self.results['energy'] = energies
 
-        BOPESresult = BOPESSamplerResult(self.results, self.results_full)
-        
-        return BOPESresult
+        result = BOPESSamplerResult(self.results, self.results_full)
+
+        return result
 
     def run_points(self, points: List[float]) -> Dict:
         """Run the sampler at the given points.
@@ -192,8 +222,8 @@ class BOPESSampler:
 
         return results
 
-    def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int],
-                       **kwargs) -> None:
+    # TODO: are dofs required in this method?
+    def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int], **kwargs) -> None:
         """Fit the sampled energy points to the energy surface.
 
         Args:
