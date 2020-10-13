@@ -1,25 +1,42 @@
-"""
-16 January 2020
-"""
+# -*- coding: utf-8 -*-
+
+# This code is part of Qiskit.
+#
+# (C) Copyright IBM 2018, 2020.
+#
+# This code is licensed under the Apache License, Version 2.0. You may
+# obtain a copy of this license in the LICENSE.txt file in the root directory
+# of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# Any modifications or derivative works of this code must retain this
+# copyright notice, and modified files need to carry a notice indicating
+# that they have been altered from the originals.
+
+"""Tests of BOPES Sampler."""
+
 import unittest
-import numpy as np
 from functools import partial
+
+import numpy as np
 from qiskit import Aer
 from qiskit.aqua import QuantumInstance
-from qiskit.circuit.library import RealAmplitudes
-from qiskit.chemistry.components.initial_states import HartreeFock
 from qiskit.aqua.algorithms import VQE, NumPyMinimumEigensolver
-from qiskit.aqua.operators import PauliExpectation
 from qiskit.aqua.components.optimizers import AQGD
+from qiskit.aqua.operators import PauliExpectation
 from qiskit.chemistry.bopes_sampler import BOPESSampler
+from qiskit.chemistry.components.initial_states import HartreeFock
 from qiskit.chemistry.drivers import Molecule, PySCFDriver
-from qiskit.chemistry.qubit_transformations import FermionicTransformation
 from qiskit.chemistry.ground_state_calculation import MinimumEigensolverGroundStateCalculation
 from qiskit.chemistry.morse_potential import MorsePotential
+from qiskit.chemistry.qubit_transformations import FermionicTransformation
+from qiskit.circuit.library import RealAmplitudes
+
 
 class TestBOPES(unittest.TestCase):
+    """Tests of BOPES Sampler."""
 
     def test_h2_bopes_sampler(self):
+        """Test BOPES Sampler on H2"""
         np.random.seed(100)
 
         # Molecule
@@ -28,10 +45,10 @@ class TestBOPES(unittest.TestCase):
                                ['H', [0., 0.45, 1.]]],
                      degrees_of_freedom=[dof])
 
-        ft = FermionicTransformation()
+        f_t = FermionicTransformation()
         driver = PySCFDriver(molecule=m)
 
-        qubitop, aux_ops = ft.transform(driver)
+        qubitop, _ = f_t.transform(driver)
 
         # Quantum Instance:
         shots = 1
@@ -41,15 +58,14 @@ class TestBOPES(unittest.TestCase):
         quantum_instance.compile_config['seed_transpiler'] = 50
 
         # Variational form
-        I_state = HartreeFock(num_orbitals=ft._molecule_info['num_orbitals'],
-                              qubit_mapping=ft._qubit_mapping,
-                              two_qubit_reduction=ft._two_qubit_reduction,
-                              num_particles=ft._molecule_info['num_particles'],
-                              sq_list=ft._molecule_info['z2_symmetries'].sq_list
+        i_state = HartreeFock(num_orbitals=f_t._molecule_info['num_orbitals'],
+                              qubit_mapping=f_t._qubit_mapping,
+                              two_qubit_reduction=f_t._two_qubit_reduction,
+                              num_particles=f_t._molecule_info['num_particles'],
+                              sq_list=f_t._molecule_info['z2_symmetries'].sq_list
                               )
         var_form = RealAmplitudes(qubitop.num_qubits, reps=1, entanglement='full',
-                                  initial_state=I_state, skip_unentangled_qubits=False)
-
+                                  initial_state=i_state, skip_unentangled_qubits=False)
 
         # Classical optimizer:
         # Analytic Quantum Gradient Descent (AQGD) (with Epochs)
@@ -64,29 +80,28 @@ class TestBOPES(unittest.TestCase):
 
         # Min Eigensolver: VQE
         solver = VQE(var_form=var_form,
-                     optimizer = optimizer,
+                     optimizer=optimizer,
                      quantum_instance=quantum_instance,
                      expectation=PauliExpectation())
 
-        me_gsc = MinimumEigensolverGroundStateCalculation(ft, solver)
+        me_gsc = MinimumEigensolverGroundStateCalculation(f_t, solver)
 
         # BOPES sampler
-        bs = BOPESSampler(gsc=me_gsc, driver=driver)
+        sampler = BOPESSampler(gsc=me_gsc, driver=driver)
 
         # absolute internuclear distance in Angstrom
         points = [0.7, 1.0, 1.3]
-        results = bs.compute_surface(points)
+        results = sampler.compute_surface(points)
 
         points_run = results.points
         energies = results.energies
 
-        np.testing.assert_array_almost_equal(
-            points_run, [0.7, 1.0, 1.3])
-        np.testing.assert_array_almost_equal(
-            energies, [-1.13618945, -1.10115033, -1.03518627], decimal=3)
-        return
+        np.testing.assert_array_almost_equal(points_run, [0.7, 1.0, 1.3])
+        np.testing.assert_array_almost_equal(energies,
+                                             [-1.13618945, -1.10115033, -1.03518627], decimal=3)
 
     def test_potential_interface(self):
+        """Tests potential interface."""
         np.random.seed(100)
 
         stretch = partial(Molecule.absolute_distance, atom_pair=(1, 0))
@@ -97,29 +112,26 @@ class TestBOPES(unittest.TestCase):
                      degrees_of_freedom=[stretch],
                      masses=[1.6735328E-27, 1.6735328E-27])
 
-        ft = FermionicTransformation()
+        f_t = FermionicTransformation()
         driver = PySCFDriver(molecule=m)
 
-        qubitop, aux_ops = ft.transform(driver)
+        f_t.transform(driver)
 
         solver = NumPyMinimumEigensolver()
 
-        me_gsc = MinimumEigensolverGroundStateCalculation(ft, solver)
+        me_gsc = MinimumEigensolverGroundStateCalculation(f_t, solver)
         # Run BOPESSampler with exact eigensolution
         points = np.arange(0.45, 5.3, 0.3)
-        bs = BOPESSampler(gsc=me_gsc, driver=driver)
+        sampler = BOPESSampler(gsc=me_gsc, driver=driver)
 
-        results = bs.compute_surface(points)
+        sampler.compute_surface(points)
 
         # Testing Potential interface
         pot = MorsePotential(m)
-        bs.fit_to_surface(pot, 0)
+        sampler.fit_to_surface(pot, 0)
 
-        np.testing.assert_array_almost_equal([pot.alpha, pot.r_0],
-                                             [2.235, 0.720], decimal=3)
-        np.testing.assert_array_almost_equal([pot.d_e, pot.m_shift],
-                                             [0.2107, -1.1419], decimal=3)
-        return
+        np.testing.assert_array_almost_equal([pot.alpha, pot.r_0], [2.235, 0.720], decimal=3)
+        np.testing.assert_array_almost_equal([pot.d_e, pot.m_shift], [0.2107, -1.1419], decimal=3)
 
 
 if __name__ == "__main__":

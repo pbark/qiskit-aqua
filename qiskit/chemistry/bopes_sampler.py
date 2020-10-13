@@ -28,9 +28,36 @@ from .extrapolator import Extrapolator
 logger = logging.getLogger(__name__)
 
 
+class BOPESSamplerResult:
+    """This result class provides a structured view to results obtained by ``BOPESSample``."""
+    # TODO BOPESSamplerResult(AlgorithmResult)
+
+    def __init__(self, results, results_full):
+        self._results = results
+        self._results_full = results_full
+
+    @property
+    def points(self) -> list:
+        """ returns list of points"""
+        return self._results.get('point')
+
+    @property
+    def energies(self) -> list:
+        """ returns list of energies"""
+        return self._results.get('energy')
+
+    @property
+    def full_results(self) -> dict:
+        """ returns all results for all points"""
+        return self._results_full
+
+    def point_results(self, point) -> dict:
+        """ returns all results for all points"""
+        return self._results_full[point]
+
+
 class BOPESSampler:
-    """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES).
-    """
+    """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES)."""
 
     def __init__(self,
                  gsc: GroundStateCalculation,
@@ -87,7 +114,7 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def compute_surface(self, points: List[float]) -> Tuple:
+    def compute_surface(self, points: List[float]) -> BOPESSamplerResult:
         """Run the sampler at the given points, potentially with repetitions.
 
         Args:
@@ -107,9 +134,9 @@ class BOPESSampler:
             energies.append(energy)
         self.results['energy'] = energies
 
-        BOPESresult = BOPESSamplerResult(self.results, self.results_full)
-        
-        return BOPESresult
+        result = BOPESSamplerResult(self.results, self.results_full)
+
+        return result
 
     def run_points(self, points: List[float]) -> Dict:
         """Run the sampler at the given points.
@@ -185,8 +212,8 @@ class BOPESSampler:
 
         return results
 
-    def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int],
-                       **kwargs) -> None:
+    # TODO: are dofs required in this method?
+    def fit_to_surface(self, energy_surface: EnergySurfaceBase, dofs: List[int], **kwargs) -> None:
         """Fit the sampled energy points to the energy surface.
 
         Args:
@@ -198,32 +225,3 @@ class BOPESSampler:
         points = self.results['point']
         energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
-
-
-class BOPESSamplerResult:
-
-    #TODO BOPESSamplerResult(AlgorithmResult)
-
-    def __init__(self, results, results_full):
-        
-        self._results = results
-        self._results_full = results_full
-        
-    @property
-    def points(self) -> list:
-        """ returns list of points"""
-        return self._results.get('point')
-    
-    @property
-    def energies(self) -> list:
-        """ returns list of energies"""
-        return self._results.get('energy')
-    
-    @property
-    def full_results(self) -> dict:
-        """ returns all results for all points"""
-        return self._results_full
-    
-    def point_results(self, point) -> dict:
-        """ returns all results for all points"""
-        return self._results_full[point]
