@@ -14,7 +14,7 @@
 """The calculation of points on the Born-Oppenheimer Potential Energy Surface (BOPES)."""
 
 import logging
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, List, Dict
 
 import numpy as np
 from qiskit.aqua import AquaError
@@ -23,7 +23,7 @@ from qiskit.chemistry.drivers import BaseDriver
 from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
 
 from .energy_surface_spline import EnergySurfaceBase
-from .extrapolator import Extrapolator
+from .extrapolator import Extrapolator, WindowExtrapolator
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +97,15 @@ class BOPESSampler:
         self._num_bootstrap = num_bootstrap
         self._extrapolator = extrapolator
 
-        if extrapolator:
+        if self._extrapolator:
             if num_bootstrap is None:
                 # set default number of bootstrapping points to 2
                 self._num_bootstrap = 2
-                # self._extrapolator.window = 0
             elif num_bootstrap >= 2:
+                if not isinstance(self._extrapolator, WindowExtrapolator):
+                    raise AquaError(
+                        'If num_bootstrap >= 2 then the extrapolator must be an instance '
+                        'of WindowExtrapolator, got {} instead'.format(self._extrapolator))
                 self._num_bootstrap = num_bootstrap
                 self._extrapolator.window = num_bootstrap  # window for extrapolator
             else:
