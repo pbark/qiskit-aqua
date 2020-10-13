@@ -19,4 +19,5 @@ from .eigenstate_result import EigenstateResult
 __all__ = ['DipoleTuple',
            'EigenstateResult',
            'ElectronicStructureResult',
+           'BOPESSamplerResult'
            ]

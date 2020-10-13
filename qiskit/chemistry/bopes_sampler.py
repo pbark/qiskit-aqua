@@ -21,7 +21,7 @@ from qiskit.aqua import AquaError
 from qiskit.aqua.algorithms import VQAlgorithm
 from qiskit.chemistry.drivers import BaseDriver
 from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
-
+from qiskit.chemistry.results.bopes_sampler_result import BOPESSamplerResult
 from .energy_surface_spline import EnergySurfaceBase
 from .extrapolator import Extrapolator
 
@@ -87,15 +87,22 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def compute_surface(self, points: List[float]) -> Tuple:
+    def compute_surface(self, points: List[float]) -> BOPESSamplerResult:
         """Run the sampler at the given points, potentially with repetitions.
 
         Args:
             points: The points along the degrees of freedom to evaluate.
 
         Returns:
-            BOPES Sampler Results
+            BOPES Sampler Result
         """
+
+        if self._driver.molecule is None:
+            raise NotImplementedError('Please provide a molecule')
+
+        if self._driver.molecule._degrees_of_freedom is None:
+            raise NotImplementedError('Please provide dof in the molecule')
+
         # full dictionary of points
         self.results_full = self.run_points(points)
         # create results dictionary with (point, energy)
@@ -199,31 +206,3 @@ class BOPESSampler:
         energies = self.results['energy']
         energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
 
-
-class BOPESSamplerResult:
-
-    #TODO BOPESSamplerResult(AlgorithmResult)
-
-    def __init__(self, results, results_full):
-        
-        self._results = results
-        self._results_full = results_full
-        
-    @property
-    def points(self) -> list:
-        """ returns list of points"""
-        return self._results.get('point')
-    
-    @property
-    def energies(self) -> list:
-        """ returns list of energies"""
-        return self._results.get('energy')
-    
-    @property
-    def full_results(self) -> dict:
-        """ returns all results for all points"""
-        return self._results_full
-    
-    def point_results(self, point) -> dict:
-        """ returns all results for all points"""
-        return self._results_full[point]
