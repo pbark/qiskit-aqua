@@ -75,7 +75,7 @@ class TestBOPES(unittest.TestCase):
         optimizer = AQGD(maxiter=aqgd_max_iter,
                          eta=aqgd_eta,
                          momentum=aqgd_momentum,
-                         tol=1e-3,
+                         tol=1e-8,
                          averaging=4)
 
         # Min Eigensolver: VQE
@@ -87,11 +87,11 @@ class TestBOPES(unittest.TestCase):
         me_gsc = MinimumEigensolverGroundStateCalculation(f_t, solver)
 
         # BOPES sampler
-        sampler = BOPESSampler(gsc=me_gsc, driver=driver)
+        sampler = BOPESSampler(gsc=me_gsc)
 
         # absolute internuclear distance in Angstrom
         points = [0.7, 1.0, 1.3]
-        results = sampler.compute_surface(points)
+        results = sampler.sample_surface(driver, points)
 
         points_run = results.points
         energies = results.energies
@@ -122,17 +122,16 @@ class TestBOPES(unittest.TestCase):
         me_gsc = MinimumEigensolverGroundStateCalculation(f_t, solver)
         # Run BOPESSampler with exact eigensolution
         points = np.arange(0.45, 5.3, 0.3)
-        sampler = BOPESSampler(gsc=me_gsc, driver=driver)
+        sampler = BOPESSampler(gsc=me_gsc)
 
-        sampler.compute_surface(points)
+        sampler.sample_surface(driver, points)
 
         # Testing Potential interface
         pot = MorsePotential(m)
-        sampler.fit_to_surface(pot, 0)
+        sampler.fit_to_surface(pot)
 
         np.testing.assert_array_almost_equal([pot.alpha, pot.r_0], [2.235, 0.720], decimal=3)
         np.testing.assert_array_almost_equal([pot.d_e, pot.m_shift], [0.2107, -1.1419], decimal=3)
-
 
 if __name__ == "__main__":
     unittest.main()
