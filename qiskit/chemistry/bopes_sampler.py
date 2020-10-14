@@ -32,7 +32,6 @@ class BOPESSampler:
 
     def __init__(self,
                  gsc: GroundStateCalculation,
-                 driver: BaseDriver,
                  tolerance: float = 1e-3,
                  bootstrap: bool = True,
                  num_bootstrap: Optional[int] = None,
@@ -40,7 +39,6 @@ class BOPESSampler:
         """
         Args:
             gsc: GroundStateCalculation
-            driver: BaseDriver
             tolerance: Tolerance desired for minimum energy.
             bootstrap: Whether to warm-start the solve of variational minimum eigensolvers.
             num_bootstrap: Number of previous points for extrapolation
@@ -56,7 +54,6 @@ class BOPESSampler:
         """
 
         self._gsc = gsc
-        self._driver = driver
         self._tolerance = tolerance
         self._bootstrap = bootstrap
         self.results = dict()  # list of Tuples of (points, energies)
@@ -85,21 +82,24 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def compute_surface(self, points: List[float]) -> BOPESSamplerResult:
+    def compute_surface(self,
+                        driver: BaseDriver,
+                        points: List[float]) -> BOPESSamplerResult:
         """Run the sampler at the given points, potentially with repetitions.
 
         Args:
+            driver: BaseDriver specific for the problem. The driver should be based on
+                    a Molecule object that has perturbations to be varied.
             points: The points along the degrees of freedom to evaluate.
 
         Returns:
             BOPES Sampler Result
         """
 
+        self._driver = driver
+
         if self._driver.molecule is None:
             raise NotImplementedError('Please provide a molecule')
-
-        if self._driver.molecule._degrees_of_freedom is None:
-            raise NotImplementedError('Please provide dof in the molecule')
 
         # full dictionary of points
         self.results_full = self.run_points(points)
