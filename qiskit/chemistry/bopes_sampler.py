@@ -82,7 +82,7 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def compute_surface(self,
+    def sample_surface(self,
                         driver: BaseDriver,
                         points: List[float]) -> BOPESSamplerResult:
         """Run the sampler at the given points, potentially with repetitions.
