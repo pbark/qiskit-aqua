@@ -133,5 +133,6 @@ class TestBOPES(unittest.TestCase):
         np.testing.assert_array_almost_equal([pot.alpha, pot.r_0], [2.235, 0.720], decimal=3)
         np.testing.assert_array_almost_equal([pot.d_e, pot.m_shift], [0.2107, -1.1419], decimal=3)
 
+
 if __name__ == "__main__":
     unittest.main()

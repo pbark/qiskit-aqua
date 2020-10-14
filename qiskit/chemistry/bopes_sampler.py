@@ -24,8 +24,10 @@ from qiskit.chemistry.ground_state_calculation import GroundStateCalculation
 from qiskit.chemistry.results.bopes_sampler_result import BOPESSamplerResult
 from .energy_surface_spline import EnergySurfaceBase
 from .extrapolator import Extrapolator, WindowExtrapolator
+from .results import EigenstateResult
 
 logger = logging.getLogger(__name__)
+
 
 class BOPESSampler:
     """Class to evaluate the Born-Oppenheimer Potential Energy Surface (BOPES)."""
@@ -50,15 +52,19 @@ class BOPESSampler:
                            and method to extrapolate variational parameters.
 
         Raises:
-            AquaError: If ``num_boostrap`` is an integer smaller than 2.
+            AquaError: If ``num_boostrap`` is an integer smaller than 2, or
+                if ``num_boostrap`` is larger than 2 and the extrapolator is not an instance of
+                ``WindowExtrapolator``.
         """
 
         self._gsc = gsc
         self._tolerance = tolerance
         self._bootstrap = bootstrap
-        self.results = dict()  # list of Tuples of (points, energies)
-        self.results_full = None  # type: Optional[Dict]
-        self._points_optparams = None  # type: Optional[Dict]
+        self._driver = None     # type: Optional[BaseDriver]
+        self._points = None     # type: Optional[List[float]]
+        self._energies = None   # type: Optional[List[float]]
+        self._raw_results = None        # type: Optional[Dict[float, EigenstateResult]]
+        self._points_optparams = None   # type: Optional[Dict[float, List[float]]]
         self._num_bootstrap = num_bootstrap
         self._extrapolator = extrapolator
 
@@ -82,9 +88,7 @@ class BOPESSampler:
             # this will be used when NOT bootstrapping
             self._initial_point = self._gsc.solver.initial_point
 
-    def sample_surface(self,
-                        driver: BaseDriver,
-                        points: List[float]) -> BOPESSamplerResult:
+    def sample_surface(self, driver: BaseDriver, points: List[float]) -> BOPESSamplerResult:
         """Run the sampler at the given points, potentially with repetitions.
 
         Args:
@@ -94,29 +98,31 @@ class BOPESSampler:
 
         Returns:
             BOPES Sampler Result
+
+        Raises:
+            AquaError: if the driver does not have a molecule specified.
         """
 
         self._driver = driver
 
         if self._driver.molecule is None:
-            raise NotImplementedError('Please provide a molecule')
+            raise AquaError('Please provide a molecule')
 
         # full dictionary of points
-        self.results_full = self.run_points(points)
+        self._raw_results = self.run_points(points)
         # create results dictionary with (point, energy)
-        self.results['point'] = list(self.results_full.keys())
-        energies = []
-        for key in self.results_full:
-            energy = self.results_full[key]['computed_electronic_energy'] + \
-                     self.results_full[key]['nuclear_repulsion_energy']
-            energies.append(energy)
-        self.results['energy'] = energies
+        self._points = list(self._raw_results.keys())
+        self._energies = []
+        for key in self._raw_results:
+            energy = self._raw_results[key]['computed_electronic_energy'] + \
+                     self._raw_results[key]['nuclear_repulsion_energy']
+            self._energies.append(energy)
 
-        result = BOPESSamplerResult(self.results, self.results_full)
+        result = BOPESSamplerResult(self._points, self._energies, self._raw_results)
 
         return result
 
-    def run_points(self, points: List[float]) -> Dict:
+    def run_points(self, points: List[float]) -> Dict[float, EigenstateResult]:
         """Run the sampler at the given points.
 
         Args:
@@ -125,7 +131,7 @@ class BOPESSampler:
         Returns:
             The results for all points.
         """
-        results_full = dict()
+        raw_results = dict()   # type: Dict[float, EigenstateResult]
         if isinstance(self._gsc.solver, VQAlgorithm):
             self._points_optparams = dict()
             self._gsc.solver.initial_point = self._initial_point
@@ -133,13 +139,12 @@ class BOPESSampler:
         # Iterate over the points
         for i, point in enumerate(points):
             logger.info('Point %s of %s', i + 1, len(points))
-            result_full = self._run_single_point(point)  # dict of results
-            results_full[point] = result_full
-            # results.append([result_full['point'], result_full['energy']])
+            raw_result = self._run_single_point(point)  # dict of results
+            raw_results[point] = raw_result
 
-        return results_full
+        return raw_results
 
-    def _run_single_point(self, point: float) -> dict:
+    def _run_single_point(self, point: float) -> EigenstateResult:
         """Run the sampler at the given single point
 
         Args:
@@ -181,24 +186,22 @@ class BOPESSampler:
                     # param set is a dictionary
                     self._gsc.solver.initial_point = param_sets.get(point)
 
-        results = dict(self._gsc.compute_groundstate(self._driver))
+        # the output is an instance of EigenstateResult
+        result = self._gsc.compute_groundstate(self._driver)
+
         # Save optimal point to bootstrap
         if isinstance(self._gsc.solver, VQAlgorithm):
             # at every point evaluation, the optimal params are updated
             optimal_params = self._gsc.solver.optimal_params
             self._points_optparams[point] = optimal_params
 
-        return results
+        return result
 
     def fit_to_surface(self, energy_surface: EnergySurfaceBase, **kwargs) -> None:
         """Fit the sampled energy points to the energy surface.
 
         Args:
             energy_surface: An energy surface object.
-            dofs: A list of the degree-of-freedom dimensions to use as the independent
-                variables in the potential function fit.
             **kwargs: Arguments to pass through to the potential's ``fit_to_data`` function.
         """
-        points = self.results['point']
-        energies = self.results['energy']
-        energy_surface.fit_to_data(xdata=points, ydata=energies, **kwargs)
+        energy_surface.fit_to_data(xdata=self._points, ydata=self._energies, **kwargs)

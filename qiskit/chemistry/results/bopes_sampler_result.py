@@ -12,11 +12,10 @@
 
 """BOPES Sampler result"""
 
-from typing import List, Optional, Tuple, cast
-
 import logging
+from typing import List, Dict
 
-from qiskit.aqua.algorithms import AlgorithmResult
+from qiskit.chemistry.results import EigenstateResult
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +23,34 @@ logger = logging.getLogger(__name__)
 class BOPESSamplerResult:
     """The BOPES Sampler result"""
 
-    def __init__(self, results, results_full):
-        self._results = results
-        self._results_full = results_full
+    # def __init__(self, results, results_full):
+    #     self._results = results
+    #     self._results_full = results_full
+    def __init__(self, points: List[float],
+                 energies: List[float],
+                 raw_results: Dict[float, EigenstateResult]) -> None:
+        super().__init__()
+        self._points = points
+        self._energies = energies
+        self._raw_results = raw_results
 
     @property
-    def points(self) -> list:
-        """ returns list of points"""
-        return self._results.get('point')
+    def points(self) -> List[float]:
+        """ returns list of points."""
+        # return self._results.get('point')
+        return self._points
 
     @property
-    def energies(self) -> list:
-        """ returns list of energies"""
-        return self._results.get('energy')
+    def energies(self) -> List[float]:
+        """ returns list of energies."""
+        # return self._results.get('energy')
+        return self._energies
 
     @property
-    def full_results(self) -> dict:
-        """ returns all results for all points"""
-        return self._results_full
+    def raw_results(self) -> Dict[float, EigenstateResult]:
+        """ returns all results for all points."""
+        return self._raw_results
 
-    def point_results(self, point) -> dict:
-        """ returns all results for all points"""
-        return self._results_full[point]
+    def point_results(self, point: float) -> EigenstateResult:
+        """ returns all results for a specific point."""
+        return self.raw_results[point]
