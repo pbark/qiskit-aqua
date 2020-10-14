@@ -29,7 +29,7 @@ from qiskit.chemistry.excited_states_calculation import QEOMExcitedStatesCalcula
 logger = logging.getLogger(__name__)
 
 
-class NumericalQEOMExcitedStatesCalculation(QEOMExcitedStatesCalculation):
+class AnalyticQEOMExcitedStatesCalculation(QEOMExcitedStatesCalculation):
     """ The calculation of excited states via the numerical qEOM algorithm """
 
     def __init__(self, ground_state_calculation: GroundStateCalculation,
@@ -92,7 +92,7 @@ class NumericalQEOMExcitedStatesCalculation(QEOMExcitedStatesCalculation):
             if logger.isEnabledFor(logging.INFO):
                 logger.info("Building all commutators:")
                 TextProgressBar(sys.stderr)
-            results = parallel_map(NumericalQEOMExcitedStatesCalculation._build_commutator_routine,
+            results = parallel_map(AnalyticQEOMExcitedStatesCalculation._build_commutator_routine,
                                    to_be_computed_list,
                                    task_args=(untapered_op, z2_symmetries, sign),
                                    num_processes=aqua_globals.num_processes)
