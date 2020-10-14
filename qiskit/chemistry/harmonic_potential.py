@@ -51,6 +51,8 @@ class HarmonicPotential(PotentialBase):
         self.m_shift = 0.0
         self.r_0 = 0.0
         self.d_e = None
+        self._mA = molecule.masses[0]
+        self._mB = molecule.masses[1]
 
     @staticmethod
     def fit_function(x, k, r_0, m_shift):

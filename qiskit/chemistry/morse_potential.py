@@ -51,6 +51,8 @@ class MorsePotential(PotentialBase):
         self.m_shift = 0.0
         self.alpha = 0.0
         self.r_0 = 0.0
+        self._mA = molecule.masses[0]
+        self._mB = molecule.masses[1]
 
     @staticmethod
     def fit_function(x, d_e, alpha, r_0, m_shift):
