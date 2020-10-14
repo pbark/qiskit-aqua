@@ -18,7 +18,7 @@ import unittest
 from functools import partial
 
 import numpy as np
-from qiskit import Aer
+from qiskit import BasicAer
 from qiskit.aqua import QuantumInstance
 from qiskit.aqua.algorithms import VQE, NumPyMinimumEigensolver
 from qiskit.aqua.components.optimizers import AQGD
@@ -53,7 +53,7 @@ class TestBOPES(unittest.TestCase):
         # Quantum Instance:
         shots = 1
         backend = 'statevector_simulator'
-        quantum_instance = QuantumInstance(Aer.get_backend(backend), shots=shots)
+        quantum_instance = QuantumInstance(BasicAer.get_backend(backend), shots=shots)
         quantum_instance.run_config.seed_simulator = 50
         quantum_instance.compile_config['seed_transpiler'] = 50
 
@@ -75,7 +75,7 @@ class TestBOPES(unittest.TestCase):
         optimizer = AQGD(maxiter=aqgd_max_iter,
                          eta=aqgd_eta,
                          momentum=aqgd_momentum,
-                         tol=1e-8,
+                         tol=1e-6,
                          averaging=4)
 
         # Min Eigensolver: VQE
