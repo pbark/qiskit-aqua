@@ -105,9 +105,13 @@ class TestExtrapolators(unittest.TestCase):
 
     def test_polynomial_extrapolator(self):
         """
-        Test extrapolation using a polynomial extrapolator with degree = 3 using all previous points
+        Test extrapolation using a polynomial extrapolator with degree = 1 using all previous points
         in the parameters for extrapolation. This test confirms that the extrapolation of the
         parameters has a specified error relative to the actual parameter values.
+        NOTE: The polynomial fit may give a runtime warning if the data is poorly fitted.
+        This depends on degree and dataset and may need be tuned by the user to achieve
+        optimal results. This reasoning holds for any instance using an internal
+        polynomial extrapolator.
         """
         points = 0.7
         params = PolynomialExtrapolator(degree=3).extrapolate(points=[points],
@@ -119,38 +123,38 @@ class TestExtrapolators(unittest.TestCase):
     def test_poly_window_extrapolator(self):
         """
         Test extrapolation using an WindowExtrapolator using a data window/lookback of 3 points
-        and an internal polynomial extrapolator with degree = 2. This test confirms that no
+        and an internal polynomial extrapolator with degree = 1. This test confirms that no
         extrapolation is performed on points before the data window, i.e, the first two points,
         and that the extrapolation of the parameters on the last three points has a error below
         a threshold when compared to the actual parameter values.
         """
         points_interspersed = [.3, .5, .7, .8, 1.5]
         window_extrapolator = Extrapolator.factory("window",
-                                                   extrapolator=PolynomialExtrapolator(degree=2),
+                                                   extrapolator=PolynomialExtrapolator(degree=1),
                                                    window=3)
         params = window_extrapolator.extrapolate(points=points_interspersed, param_dict=PARAM_DICT)
         self.assertFalse(params.get(.3))
         self.assertFalse(params.get(.5))
         sq_diff_1 = [(actual - expected) ** 2
                      for actual, expected in zip(params[.7], PARAM_DICT[.7])]
-        self.assertLess(sum(sq_diff_1), 1e-2)
+        self.assertLess(sum(sq_diff_1), 1e-1)
         sq_diff_2 = [(actual - expected) ** 2
                      for actual, expected in zip(params[.8], PARAM_DICT[.8])]
-        self.assertLess(sum(sq_diff_2), 1e-3)
+        self.assertLess(sum(sq_diff_2), 1e-2)
         sq_diff_3 = [(actual - expected) ** 2
                      for actual, expected in zip(params[1.5], PARAM_DICT[1.5])]
-        self.assertLess(sum(sq_diff_3), 1e-3)
+        self.assertLess(sum(sq_diff_3), 1e-2)
 
     def test_differential_model_window_extrapolator(self):
         """
         Test extrapolation using an WindowExtrapolator using a data window/lookback of 3 points
-        and an internal differential extrapolator with degree = 2 and the default linear regression
+        and an internal differential extrapolator with degree = 1 and the default linear regression
         model from scikit-learn. This test confirms that no extrapolation is performed on points
         before the data window, i.e, the first two points, and that the extrapolation of the
         parameters on the last three points has some specified error relative to the actual values.
         """
         points_interspersed = [.3, .5, .7, .8, 1.5]
-        window_extrapolator = WindowExtrapolator(extrapolator=DifferentialExtrapolator(degree=2),
+        window_extrapolator = WindowExtrapolator(extrapolator=DifferentialExtrapolator(degree=1),
                                                  window=3)
         params = window_extrapolator.extrapolate(points=points_interspersed, param_dict=PARAM_DICT)
         self.assertFalse(params.get(.3))
@@ -168,14 +172,14 @@ class TestExtrapolators(unittest.TestCase):
     def test_differential_model_window_alternate_model_extrapolator(self):
         """
         Test extrapolation using an WindowExtrapolator using a data window/lookback of 3 points
-        and an internal differential extrapolator with degree = 2 and the Ridge regression model
+        and an internal differential extrapolator with degree = 1 and the Ridge regression model
         from scikit-learn. This test confirms that no extrapolation is performed on points before
         the data window, i.e, the first two points, and that the extrapolation of the parameters on
         the last three points has some specified error relative to the actual parameter values.
         """
         points_interspersed = [.3, .5, .7, .8, 1.5]
         model = linear_model.Ridge()
-        window_extrapolator = WindowExtrapolator(extrapolator=DifferentialExtrapolator(degree=2,
+        window_extrapolator = WindowExtrapolator(extrapolator=DifferentialExtrapolator(degree=1,
                                                                                        model=model),
                                                  window=3)
         params = window_extrapolator.extrapolate(points=points_interspersed, param_dict=PARAM_DICT)
@@ -195,13 +199,13 @@ class TestExtrapolators(unittest.TestCase):
     def test_pca_polynomial_window_extrapolator(self):
         """
         Test extrapolation using an PCAExtrapolator using a data window/lookback of 3 points
-        and an internal polynomial extrapolator with degree = 3 using regular PCA as default.
+        and an internal polynomial extrapolator with degree = 1 using regular PCA as default.
         This test confirms that no extrapolation is performed on points before the
         data window, i.e, the first two points, and that the extrapolation of the parameters on
         last three points has a specified error relative to the actual parameter values.
         """
         points_interspersed = [.3, .5, .7, .8, 1.5]
-        pca_poly_win_ext = PCAExtrapolator(extrapolator=PolynomialExtrapolator(degree=3),
+        pca_poly_win_ext = PCAExtrapolator(extrapolator=PolynomialExtrapolator(degree=1),
                                            window=3)
         params = pca_poly_win_ext.extrapolate(points=points_interspersed, param_dict=PARAM_DICT)
         self.assertFalse(params.get(.3))
@@ -219,13 +223,13 @@ class TestExtrapolators(unittest.TestCase):
     def test_sieve_poly_window_extrapolator(self):
         """
         Test extrapolation using an Sieve/Clustering Extrapolator using a data window/lookback of
-        3 points and an internal polynomial extrapolator with degree = 3.
+        3 points and an internal polynomial extrapolator with degree = 1.
         This test confirms that no extrapolation is performed on points before the
         data window, i.e, the first two points, and that the extrapolation of the parameters on the
         last three points has some specified error relative to the actual parameter values.
         """
         points_interspersed = [.3, .5, .7, .8, 1.5]
-        sieve_win_extrapolator = SieveExtrapolator(extrapolator=PolynomialExtrapolator(degree=3),
+        sieve_win_extrapolator = SieveExtrapolator(extrapolator=PolynomialExtrapolator(degree=1),
                                                    window=3)
         params = sieve_win_extrapolator.extrapolate(points=points_interspersed,
                                                     param_dict=PARAM_DICT)
